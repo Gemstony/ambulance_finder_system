@@ -4,7 +4,7 @@ import '../../services/firestore_service.dart';
 import '../../utils/colors.dart';
 
 class LiveTracking extends StatefulWidget {
-  const LiveTracking({Key? key}) : super(key: key);
+  const LiveTracking({super.key});
 
   @override
   State<LiveTracking> createState() => _LiveTrackingState();

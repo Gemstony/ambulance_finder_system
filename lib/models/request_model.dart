@@ -296,7 +296,7 @@ class RequestModel {
   
   // Calculate response time (time from request to arrival)
   Duration? get responseTime {
-    if (timestamp != null && arrivedAt != null) {
+    if (arrivedAt != null) {
       return arrivedAt!.difference(timestamp);
     }
     return null;

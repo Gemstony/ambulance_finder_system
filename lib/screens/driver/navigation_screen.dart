@@ -14,12 +14,12 @@ class NavigationScreen extends StatefulWidget {
   final double patientLng;
 
   const NavigationScreen({
-    Key? key,
+    super.key,
     required this.requestId,
     required this.patientName,
     required this.patientLat,
     required this.patientLng,
-  }) : super(key: key);
+  });
 
   @override
   State<NavigationScreen> createState() => _NavigationScreenState();
@@ -365,12 +365,12 @@ class CustomButton extends StatelessWidget {
   final double height;
 
   const CustomButton({
-    Key? key,
+    super.key,
     required this.text,
     required this.onPressed,
     this.isEmergency = false,
     this.height = 50,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

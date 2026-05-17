@@ -8,7 +8,7 @@ import '../../utils/colors.dart';
 import 'navigation_screen.dart';
 
 class IncomingRequests extends StatefulWidget {
-  const IncomingRequests({Key? key}) : super(key: key);
+  const IncomingRequests({super.key});
 
   @override
   State<IncomingRequests> createState() => _IncomingRequestsState();

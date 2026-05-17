@@ -9,7 +9,7 @@ import 'incoming_requests.dart';
 import '../../screens/common/profile_screen.dart';
 
 class DriverHome extends StatefulWidget {
-  const DriverHome({Key? key}) : super(key: key);
+  const DriverHome({super.key});
 
   @override
   State<DriverHome> createState() => _DriverHomeState();
@@ -171,7 +171,7 @@ class _DriverHomeState extends State<DriverHome> {
                       Switch(
                         value: _isOnline,
                         onChanged: (_) => _toggleOnlineStatus(),
-                        activeColor: AppColors.primaryGreen,
+                        activeThumbColor: AppColors.primaryGreen,
                       ),
                     ],
                   ),

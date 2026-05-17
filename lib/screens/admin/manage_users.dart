@@ -5,7 +5,7 @@ import '../../services/firestore_service.dart';
 import '../../utils/colors.dart';
 
 class ManageUsers extends StatefulWidget {
-  const ManageUsers({Key? key}) : super(key: key);
+  const ManageUsers({super.key});
 
   @override
   State<ManageUsers> createState() => _ManageUsersState();

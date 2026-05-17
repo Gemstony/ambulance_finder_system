@@ -5,7 +5,7 @@ import '../../providers/request_provider.dart';
 import '../../utils/colors.dart';
 
 class TrackingScreen extends StatefulWidget {
-  const TrackingScreen({Key? key}) : super(key: key);
+  const TrackingScreen({super.key});
 
   @override
   State<TrackingScreen> createState() => _TrackingScreenState();
