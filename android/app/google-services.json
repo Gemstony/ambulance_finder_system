@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "649286349357",
+    "firebase_url": "https://ambulance-finder-system-default-rtdb.firebaseio.com",
+    "project_id": "ambulance-finder-system",
+    "storage_bucket": "ambulance-finder-system.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:649286349357:android:1832611ea5e1e0184fbea4",
+        "android_client_info": {
+          "package_name": "com.example.ambulance_finder_system"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCULWcG9egtrYUvRcktFk07cA3K7zV3h1s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
