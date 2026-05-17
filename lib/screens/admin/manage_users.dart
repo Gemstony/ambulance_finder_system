@@ -35,7 +35,6 @@ class _ManageUsersState extends State<ManageUsers> {
         _currentAdminId = currentUser.uid;
       });
       
-      // Get current admin role
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUser.uid)
@@ -59,118 +58,397 @@ class _ManageUsersState extends State<ManageUsers> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppColors.veryLightGreen, AppColors.white],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-      ),
-      child: Column(
-        children: [
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 5),
-                ],
-              ),
-              child: TextField(
-                onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
-                decoration: InputDecoration(
-                  hintText: 'Search users...',
-                  prefixIcon: const Icon(Icons.search, color: AppColors.primaryGreen),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-              ),
+  // ============================================================
+  // NEW: SHOW ADD USER DIALOG
+  // ============================================================
+  void _showAddUserDialog() {
+    final TextEditingController fullNameController = TextEditingController();
+    final TextEditingController emailController = TextEditingController();
+    final TextEditingController phoneController = TextEditingController();
+    final TextEditingController passwordController = TextEditingController();
+    
+    String selectedRole = 'patient';
+    bool isLoading = false;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setStateDialog) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.person_add, color: AppColors.primaryGreen),
+                const SizedBox(width: 8),
+                const Text('Add New User'),
+              ],
             ),
-          ),
-          
-          // Role Filter
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: _roles.map((role) {
-                final isSelected = _filterRole == role;
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: FilterChip(
-                      label: Text(role.toUpperCase()),
-                      selected: isSelected,
-                      onSelected: (_) => setState(() => _filterRole = role),
-                      backgroundColor: Colors.white,
-                      selectedColor: AppColors.primaryGreen,
-                      labelStyle: TextStyle(
-                        color: isSelected ? Colors.white : AppColors.darkGrey,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Full Name Field
+                  TextField(
+                    controller: fullNameController,
+                    decoration: InputDecoration(
+                      labelText: 'Full Name',
+                      hintText: 'Enter full name',
+                      prefixIcon: const Icon(Icons.person_outline),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                   ),
-                );
-              }).toList(),
+                  const SizedBox(height: 12),
+                  
+                  // Email Field
+                  TextField(
+                    controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      labelText: 'Email',
+                      hintText: 'Enter email address',
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Phone Field
+                  TextField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: 'Phone Number',
+                      hintText: 'Enter phone number',
+                      prefixIcon: const Icon(Icons.phone_outlined),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Password Field
+                  TextField(
+                    controller: passwordController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      hintText: 'Enter password (min 6 characters)',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Role Selection
+                  const Text(
+                    'Select Role:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildRoleRadio(
+                          title: 'Patient',
+                          icon: Icons.person,
+                          role: 'patient',
+                          selectedRole: selectedRole,
+                          color: AppColors.primaryGreen,
+                          onChanged: (value) {
+                            setStateDialog(() => selectedRole = value!);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildRoleRadio(
+                          title: 'Driver',
+                          icon: Icons.airport_shuttle,
+                          role: 'driver',
+                          selectedRole: selectedRole,
+                          color: Colors.blue,
+                          onChanged: (value) {
+                            setStateDialog(() => selectedRole = value!);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildRoleRadio(
+                          title: 'Admin',
+                          icon: Icons.admin_panel_settings,
+                          role: 'admin',
+                          selectedRole: selectedRole,
+                          color: Colors.red,
+                          onChanged: (value) {
+                            setStateDialog(() => selectedRole = value!);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  if (isLoading)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: CircularProgressIndicator(),
+                    ),
+                ],
+              ),
             ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Users List
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _firestoreService.getAllUsers(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-                
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(child: Text('No users found'));
-                }
-                
-                var users = snapshot.data!.docs;
-                
-                // Apply filters
-                if (_filterRole != 'all') {
-                  users = users.where((doc) => doc['role'] == _filterRole).toList();
-                }
-                
-                if (_searchQuery.isNotEmpty) {
-                  users = users.where((doc) {
-                    final name = doc['fullName']?.toString().toLowerCase() ?? '';
-                    final email = doc['email']?.toString().toLowerCase() ?? '';
-                    return name.contains(_searchQuery) || email.contains(_searchQuery);
-                  }).toList();
-                }
-                
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: users.length,
-                  itemBuilder: (context, index) {
-                    final user = users[index];
-                    final isCurrentAdmin = user.id == _currentAdminId;
-                    return _buildUserCard(user, isCurrentAdmin);
-                  },
-                );
-              },
-            ),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  // Validation
+                  if (fullNameController.text.trim().isEmpty) {
+                    _showSnackBar('Please enter full name', isError: true);
+                    return;
+                  }
+                  if (emailController.text.trim().isEmpty) {
+                    _showSnackBar('Please enter email', isError: true);
+                    return;
+                  }
+                  if (phoneController.text.trim().isEmpty) {
+                    _showSnackBar('Please enter phone number', isError: true);
+                    return;
+                  }
+                  if (passwordController.text.length < 6) {
+                    _showSnackBar('Password must be at least 6 characters', isError: true);
+                    return;
+                  }
+                  
+                  setStateDialog(() => isLoading = true);
+                  
+                  try {
+                    // 1. Create user in Firebase Auth
+                    final userCredential = await _auth.createUserWithEmailAndPassword(
+                      email: emailController.text.trim(),
+                      password: passwordController.text,
+                    );
+                    
+                    // 2. Create user document in Firestore
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(userCredential.user!.uid)
+                        .set({
+                      'uid': userCredential.user!.uid,
+                      'fullName': fullNameController.text.trim(),
+                      'email': emailController.text.trim(),
+                      'phone': phoneController.text.trim(),
+                      'role': selectedRole,
+                      'isActive': true,
+                      'createdAt': FieldValue.serverTimestamp(),
+                      'updatedAt': FieldValue.serverTimestamp(),
+                    });
+                    
+                    setStateDialog(() => isLoading = false);
+                    Navigator.pop(dialogContext);
+                    
+                    _showSnackBar(
+                      '${selectedRole.toUpperCase()} "${fullNameController.text.trim()}" added successfully!'
+                    );
+                    setState(() {});
+                    
+                  } catch (e) {
+                    setStateDialog(() => isLoading = false);
+                    
+                    // Check if email already exists
+                    if (e.toString().contains('email-already-in-use')) {
+                      _showSnackBar('Email already exists!', isError: true);
+                    } else {
+                      _showSnackBar('Failed to add user: ${e.toString()}', isError: true);
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryGreen,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Add User'),
+              ),
+            ],
+          );
+        },
       ),
+    );
+  }
+  
+  Widget _buildRoleRadio({
+    required String title,
+    required IconData icon,
+    required String role,
+    required String selectedRole,
+    required Color color,
+    required Function(String?) onChanged,
+  }) {
+    final isSelected = selectedRole == role;
+    return GestureDetector(
+      onTap: () => onChanged(role),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.1) : Colors.grey.shade50,
+          border: Border.all(
+            color: isSelected ? color : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: isSelected ? color : Colors.grey, size: 24),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? color : Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [AppColors.veryLightGreen, AppColors.white],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Column(
+          children: [
+            // Search Bar
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 5),
+                  ],
+                ),
+                child: TextField(
+                  onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
+                  decoration: InputDecoration(
+                    hintText: 'Search users...',
+                    prefixIcon: const Icon(Icons.search, color: AppColors.primaryGreen),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            
+            // Role Filter
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: _roles.map((role) {
+                  final isSelected = _filterRole == role;
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: FilterChip(
+                        label: Text(role.toUpperCase()),
+                        selected: isSelected,
+                        onSelected: (_) => setState(() => _filterRole = role),
+                        backgroundColor: Colors.white,
+                        selectedColor: AppColors.primaryGreen,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : AppColors.darkGrey,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Users List
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: _firestoreService.getAllUsers(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error: ${snapshot.error}'));
+                  }
+                  
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return const Center(child: Text('No users found'));
+                  }
+                  
+                  var users = snapshot.data!.docs;
+                  
+                  // Apply filters
+                  if (_filterRole != 'all') {
+                    users = users.where((doc) => doc['role'] == _filterRole).toList();
+                  }
+                  
+                  if (_searchQuery.isNotEmpty) {
+                    users = users.where((doc) {
+                      final name = doc['fullName']?.toString().toLowerCase() ?? '';
+                      final email = doc['email']?.toString().toLowerCase() ?? '';
+                      return name.contains(_searchQuery) || email.contains(_searchQuery);
+                    }).toList();
+                  }
+                  
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: users.length,
+                    itemBuilder: (context, index) {
+                      final user = users[index];
+                      final isCurrentAdmin = user.id == _currentAdminId;
+                      return _buildUserCard(user, isCurrentAdmin);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      // ============================================================
+      // NEW: FLOATING ACTION BUTTON
+      // ============================================================
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showAddUserDialog,
+        backgroundColor: AppColors.primaryGreen,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.person_add),
+        label: const Text('Add User'),
+        elevation: 4,
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -320,7 +598,6 @@ class _ManageUsersState extends State<ManageUsers> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Activate/Deactivate Option
             ListTile(
               leading: Icon(
                 isActive ? Icons.block : Icons.check_circle,
@@ -344,10 +621,7 @@ class _ManageUsersState extends State<ManageUsers> {
                 }
               },
             ),
-            
             const Divider(),
-            
-            // Change Role Option - With full role selection
             ListTile(
               leading: const Icon(Icons.admin_panel_settings, color: Colors.blue),
               title: const Text('Change Role'),
@@ -357,10 +631,7 @@ class _ManageUsersState extends State<ManageUsers> {
                 _showRoleSelectionDialog(userId, currentRole);
               },
             ),
-            
             const Divider(),
-            
-            // Delete User Option
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.red),
               title: const Text('Delete User', style: TextStyle(color: Colors.red)),
@@ -376,7 +647,6 @@ class _ManageUsersState extends State<ManageUsers> {
     );
   }
 
-  // NEW: Role Selection Dialog with all 3 options
   void _showRoleSelectionDialog(String userId, String currentRole) {
     String? selectedRole = currentRole;
     
@@ -391,7 +661,6 @@ class _ManageUsersState extends State<ManageUsers> {
               children: [
                 const Text('Select new role for this user:'),
                 const SizedBox(height: 16),
-                // Radio buttons for each role
                 RadioListTile<String>(
                   title: const Text('👤 Patient', style: TextStyle(fontWeight: FontWeight.w500)),
                   subtitle: const Text('Can request ambulances only'),
@@ -479,7 +748,6 @@ class _ManageUsersState extends State<ManageUsers> {
             onPressed: () async {
               Navigator.pop(context);
               
-              // Show loading indicator
               showDialog(
                 context: context,
                 barrierDismissible: false,
@@ -487,16 +755,11 @@ class _ManageUsersState extends State<ManageUsers> {
               );
               
               try {
-                // Delete user document from Firestore
                 await FirebaseFirestore.instance.collection('users').doc(userId).delete();
-                
-                // Close loading dialog
                 Navigator.pop(context);
-                
                 _showSnackBar('User "$userName" deleted successfully!');
                 setState(() {});
               } catch (e) {
-                // Close loading dialog
                 Navigator.pop(context);
                 _showSnackBar('Failed to delete user: ${e.toString()}', isError: true);
               }
