@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../providers/location_provider.dart';
-import '../../providers/request_provider.dart';
 import '../../utils/colors.dart';
 
 class TrackingScreen extends StatefulWidget {
@@ -12,11 +16,247 @@ class TrackingScreen extends StatefulWidget {
 }
 
 class _TrackingScreenState extends State<TrackingScreen> {
+  GoogleMapController? _mapController;
+  Completer<GoogleMapController> _controller = Completer();
+  
+  LatLng? _patientLocation;
+  LatLng? _driverLocation;
+  String? _driverId;
+  String? _requestId;
+  String _requestStatus = 'pending';
+  String _driverName = 'Assigning driver...';
+  String _driverPhone = '';
+  
+  Set<Marker> _markers = {};
+  Set<Polyline> _polylines = {};
+  
+  StreamSubscription? _driverLocationSubscription;
+  StreamSubscription? _requestSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPatientLocation();
+    _getActiveRequest();
+  }
+
+  Future<void> _loadPatientLocation() async {
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    await locationProvider.getCurrentLocation();
+    final loc = locationProvider.currentLocation;
+    if (loc != null) {
+      setState(() {
+        _patientLocation = LatLng(loc.latitude, loc.longitude);
+        _updatePatientMarker();
+      });
+      
+      // Move camera to patient location
+      if (_mapController != null) {
+        _mapController!.animateCamera(
+          CameraUpdate.newLatLngZoom(_patientLocation!, 14),
+        );
+      }
+    }
+  }
+
+  Future<void> _getActiveRequest() async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+    
+    _requestSubscription = FirebaseFirestore.instance
+        .collection('requests')
+        .where('patientId', isEqualTo: userId)
+        .where('status', whereIn: ['pending', 'accepted', 'enroute', 'arrived', 'patient_loaded'])
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.docs.isNotEmpty) {
+        final doc = snapshot.docs.first;
+        final data = doc.data();
+        
+        setState(() {
+          _requestId = doc.id;
+          _requestStatus = data['status'] ?? 'pending';
+          _driverId = data['driverId'];
+          _driverName = data['driverName'] ?? 'Assigning driver...';
+          _driverPhone = data['driverPhone'] ?? '';
+        });
+        
+        if (_driverId != null && _driverId!.isNotEmpty) {
+          _listenToDriverLocation(_driverId!);
+        }
+        
+        _updateStatusMarker();
+      } else {
+        // No active request
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No active ambulance request')),
+        );
+        Navigator.pop(context);
+      }
+    });
+  }
+
+  void _listenToDriverLocation(String driverId) {
+    _driverLocationSubscription = FirebaseFirestore.instance
+        .collection('drivers_location')
+        .doc(driverId)
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.exists && snapshot.data() != null) {
+        final data = snapshot.data() as Map<String, dynamic>;
+        final location = data['location'] as GeoPoint?;
+        
+        if (location != null) {
+          setState(() {
+            _driverLocation = LatLng(location.latitude, location.longitude);
+            _updateDriverMarker();
+            _drawRoute();
+          });
+          
+          // Auto zoom to show both locations if map is initialized
+          if (_mapController != null && _patientLocation != null && _driverLocation != null) {
+            _zoomToFitBothLocations();
+          }
+        }
+      }
+    });
+  }
+
+  void _updatePatientMarker() {
+    if (_patientLocation == null) return;
+    
+    setState(() {
+      _markers.removeWhere((marker) => marker.markerId.value == 'patient');
+      _markers.add(
+        Marker(
+          markerId: const MarkerId('patient'),
+          position: _patientLocation!,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          infoWindow: const InfoWindow(title: 'Your Location', snippet: 'Patient'),
+        ),
+      );
+    });
+  }
+
+  void _updateDriverMarker() {
+    if (_driverLocation == null) return;
+    
+    setState(() {
+      _markers.removeWhere((marker) => marker.markerId.value == 'driver');
+      _markers.add(
+        Marker(
+          markerId: const MarkerId('driver'),
+          position: _driverLocation!,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          infoWindow: InfoWindow(title: _driverName, snippet: 'Ambulance'),
+        ),
+      );
+    });
+  }
+
+  void _updateStatusMarker() {
+    setState(() {
+      _markers.removeWhere((marker) => marker.markerId.value == 'status');
+      // Status is shown in the card, not as marker
+    });
+  }
+
+  void _drawRoute() async {
+    if (_patientLocation == null || _driverLocation == null) return;
+    
+    // In production, use Google Maps Directions API
+    // For now, we'll draw a simple straight line
+    
+    setState(() {
+      _polylines.clear();
+      _polylines.add(
+        Polyline(
+          polylineId: const PolylineId('route'),
+          points: [_driverLocation!, _patientLocation!],
+          color: AppColors.primaryGreen,
+          width: 4,
+          patterns: [PatternItem.dash(20), PatternItem.gap(10)],
+        ),
+      );
+    });
+  }
+
+  void _zoomToFitBothLocations() {
+    if (_patientLocation == null || _driverLocation == null) return;
+    
+    double minLat = _patientLocation!.latitude < _driverLocation!.latitude 
+        ? _patientLocation!.latitude 
+        : _driverLocation!.latitude;
+    double maxLat = _patientLocation!.latitude > _driverLocation!.latitude 
+        ? _patientLocation!.latitude 
+        : _driverLocation!.latitude;
+    double minLng = _patientLocation!.longitude < _driverLocation!.longitude 
+        ? _patientLocation!.longitude 
+        : _driverLocation!.longitude;
+    double maxLng = _patientLocation!.longitude > _driverLocation!.longitude 
+        ? _patientLocation!.longitude 
+        : _driverLocation!.longitude;
+    
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(minLat - 0.01, minLng - 0.01),
+          northeast: LatLng(maxLat + 0.01, maxLng + 0.01),
+        ),
+        50,
+      ),
+    );
+  }
+
+  double _calculateDistance() {
+    if (_patientLocation == null || _driverLocation == null) return 0;
+    
+    const double earthRadius = 6371; // km
+    
+    double lat1 = _patientLocation!.latitude;
+    double lon1 = _patientLocation!.longitude;
+    double lat2 = _driverLocation!.latitude;
+    double lon2 = _driverLocation!.longitude;
+    
+    double dLat = (lat2 - lat1) * (3.14159 / 180);
+    double dLon = (lon2 - lon1) * (3.14159 / 180);
+    
+    double a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1 * (3.14159 / 180)) * cos(lat2 * (3.14159 / 180)) *
+        sin(dLon / 2) * sin(dLon / 2);
+    double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    
+    return earthRadius * c;
+  }
+
+  String _formatDistance(double km) {
+    if (km < 1) {
+      return '${(km * 1000).round()} m';
+    }
+    return '${km.toStringAsFixed(1)} km';
+  }
+
+  String _formatEta(double km) {
+    // Assume average speed 40 km/h in city
+    double hours = km / 40;
+    int minutes = (hours * 60).round();
+    if (minutes < 1) return 'Less than a minute';
+    if (minutes < 60) return '$minutes min';
+    return '${(minutes / 60).floor()}h ${minutes % 60}min';
+  }
+
+  @override
+  void dispose() {
+    _driverLocationSubscription?.cancel();
+    _requestSubscription?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final locationProvider = Provider.of<LocationProvider>(context);
-    final requestProvider = Provider.of<RequestProvider>(context);
-    final activeRequest = requestProvider.activeRequest;
+    final distance = _calculateDistance();
+    final eta = _formatEta(distance);
+    final distanceText = _formatDistance(distance);
     
     return Scaffold(
       appBar: AppBar(
@@ -24,301 +264,247 @@ class _TrackingScreenState extends State<TrackingScreen> {
         backgroundColor: AppColors.primaryGreen,
         foregroundColor: Colors.white,
         elevation: 0,
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [AppColors.veryLightGreen, AppColors.white],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.phone),
+            onPressed: _driverPhone.isNotEmpty
+                ? () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Calling driver at $_driverPhone...')),
+                    );
+                  }
+                : null,
           ),
-        ),
-        child: activeRequest == null
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.location_off, size: 80, color: AppColors.grey),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No active ambulance request',
-                      style: TextStyle(fontSize: 16, color: AppColors.darkGrey),
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Go Back'),
-                    ),
-                  ],
-                ),
-              )
-            : Column(
-                children: [
-                  // Status Timeline
-                  _buildStatusTimeline(activeRequest.status),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Ambulance Info Card
-                  _buildAmbulanceInfoCard(activeRequest),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Location Info
-                  _buildLocationInfo(locationProvider, activeRequest),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // ETA Card
-                  _buildETACard(locationProvider, activeRequest),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Emergency Contacts
-                  _buildEmergencyContacts(),
+        ],
+      ),
+      body: Stack(
+        children: [
+          // Google Map
+          if (_patientLocation != null)
+            GoogleMap(
+              onMapCreated: (controller) {
+                _mapController = controller;
+                _controller.complete(controller);
+              },
+              initialCameraPosition: CameraPosition(
+                target: _patientLocation!,
+                zoom: 14,
+              ),
+              markers: _markers,
+              polylines: _polylines,
+              myLocationEnabled: true,
+              myLocationButtonEnabled: true,
+              zoomControlsEnabled: true,
+              compassEnabled: true,
+            )
+          else
+            const Center(child: CircularProgressIndicator()),
+          
+          // Bottom Info Card
+          Positioned(
+            bottom: 16,
+            left: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  ),
                 ],
               ),
-      ),
-    );
-  }
-  
-  Widget _buildStatusTimeline(String status) {
-    final List<Map<String, dynamic>> steps = [
-      {'label': 'Requested', 'key': 'pending', 'icon': Icons.add_circle_outline},
-      {'label': 'Accepted', 'key': 'accepted', 'icon': Icons.check_circle_outline},
-      {'label': 'En Route', 'key': 'enroute', 'icon': Icons.directions_car},
-      {'label': 'Arrived', 'key': 'arrived', 'icon': Icons.location_on},
-      {'label': 'At Hospital', 'key': 'at_hospital', 'icon': Icons.local_hospital},
-    ];
-    
-    int currentStep = steps.indexWhere((step) => step['key'] == status);
-    if (currentStep == -1) currentStep = 0;
-    
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Trip Status',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: List.generate(steps.length, (index) {
-              final isCompleted = index <= currentStep;
-              final isCurrent = index == currentStep;
-              
-              return Expanded(
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: isCompleted ? AppColors.primaryGreen : Colors.grey.shade200,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        steps[index]['icon'],
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      steps[index]['label'],
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                        color: isCompleted ? AppColors.primaryGreen : AppColors.grey,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              );
-            }),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildAmbulanceInfoCard(activeRequest) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.veryLightGreen,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.local_hospital, color: AppColors.primaryGreen, size: 30),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  activeRequest.driverName ?? 'Assigning Driver...',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  activeRequest.ambulanceNumber ?? 'Ambulance Unit',
-                  style: TextStyle(fontSize: 12, color: AppColors.grey),
-                ),
-              ],
-            ),
-          ),
-          if (activeRequest.driverId != null)
-            IconButton(
-              icon: const Icon(Icons.phone, color: AppColors.primaryGreen),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Calling driver...')),
-                );
-              },
-            ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildLocationInfo(LocationProvider locationProvider, activeRequest) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('📍 Location Information', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.person, size: 16, color: AppColors.grey),
-              const SizedBox(width: 8),
-              Text('You: ${locationProvider.formattedCurrentLocation}'),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.local_hospital, size: 16, color: AppColors.grey),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Ambulance: ${locationProvider.hasDriverLocation ? locationProvider.formattedDriverLocation : "Waiting for location..."}',
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildETACard(LocationProvider locationProvider, activeRequest) {
-    final eta = locationProvider.getEstimatedTimeTo(
-      activeRequest.patientLocation.latitude,
-      activeRequest.patientLocation.longitude,
-    );
-    
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: AppColors.primaryGradient,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.timer, color: Colors.white, size: 30),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Estimated Arrival Time', style: TextStyle(color: Colors.white70)),
-                Text(
-                  locationProvider.getFormattedEstimatedTimeTo(
-                    activeRequest.patientLocation.latitude,
-                    activeRequest.patientLocation.longitude,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Status Timeline
+                  Row(
+                    children: [
+                      _buildStatusStep(Icons.check_circle, 'Requested', _requestStatus != 'pending'),
+                      Expanded(child: Container(height: 2, color: _requestStatus != 'pending' ? Colors.green : Colors.grey)),
+                      _buildStatusStep(Icons.check_circle, 'Accepted', _requestStatus == 'accepted' || _requestStatus == 'enroute' || _requestStatus == 'arrived'),
+                      Expanded(child: Container(height: 2, color: _requestStatus == 'enroute' || _requestStatus == 'arrived' ? Colors.green : Colors.grey)),
+                      _buildStatusStep(Icons.directions_car, 'En Route', _requestStatus == 'enroute' || _requestStatus == 'arrived'),
+                      Expanded(child: Container(height: 2, color: _requestStatus == 'arrived' ? Colors.green : Colors.grey)),
+                      _buildStatusStep(Icons.location_on, 'Arrived', _requestStatus == 'arrived'),
+                    ],
                   ),
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  
+                  // Driver Info
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.veryLightGreen,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(Icons.local_hospital, color: AppColors.primaryGreen, size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _driverName,
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              'Vehicle: Ambulance Unit',
+                              style: TextStyle(fontSize: 12, color: AppColors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_driverLocation != null)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              distanceText,
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryGreen),
+                            ),
+                            Text(
+                              'ETA: $eta',
+                              style: TextStyle(fontSize: 12, color: AppColors.primaryGreen),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 12),
+                  
+                  // Status Message
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _requestStatus == 'arrived'
+                          ? Colors.green.shade50
+                          : _requestStatus == 'enroute'
+                              ? Colors.orange.shade50
+                              : Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _requestStatus == 'arrived'
+                              ? Icons.check_circle
+                              : _requestStatus == 'enroute'
+                                  ? Icons.directions_car
+                                  : Icons.access_time,
+                          color: _requestStatus == 'arrived'
+                              ? Colors.green
+                              : _requestStatus == 'enroute'
+                                  ? Colors.orange
+                                  : Colors.blue,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _requestStatus == 'arrived'
+                                ? 'Ambulance has arrived at your location!'
+                                : _requestStatus == 'enroute'
+                                    ? 'Ambulance is on the way. Please stay at your location.'
+                                    : _requestStatus == 'accepted'
+                                        ? 'Driver has accepted your request and is preparing to depart.'
+                                        : 'Waiting for a driver to accept your request...',
+                            style: TextStyle(
+                              color: _requestStatus == 'arrived'
+                                  ? Colors.green
+                                  : _requestStatus == 'enroute'
+                                      ? Colors.orange
+                                      : Colors.blue,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 12),
+                  
+                  // Action Button
+                  if (_requestStatus == 'arrived')
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          // Mark as loaded or complete
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Ambulance has arrived! Please board.')),
+                          );
+                        },
+                        icon: const Icon(Icons.people),
+                        label: const Text('Ambulance Has Arrived'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryGreen,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          
+          // Center Button to Fit View
+          Positioned(
+            top: 16,
+            right: 16,
+            child: FloatingActionButton.small(
+              onPressed: () {
+                if (_patientLocation != null && _driverLocation != null) {
+                  _zoomToFitBothLocations();
+                } else if (_patientLocation != null) {
+                  _mapController?.animateCamera(
+                    CameraUpdate.newLatLngZoom(_patientLocation!, 14),
+                  );
+                }
+              },
+              backgroundColor: Colors.white,
+              foregroundColor: AppColors.primaryGreen,
+              child: const Icon(Icons.fit_screen),
             ),
           ),
         ],
       ),
     );
   }
-  
-  Widget _buildEmergencyContacts() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('📞 Emergency Contacts', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          ListTile(
-            leading: const Icon(Icons.emergency, color: AppColors.darkRed),
-            title: const Text('Emergency Hotline'),
-            subtitle: const Text('112 or 115'),
-            trailing: IconButton(
-              icon: const Icon(Icons.call, color: AppColors.primaryGreen),
-              onPressed: () {},
-            ),
-            dense: true,
+
+  Widget _buildStatusStep(IconData icon, String label, bool isCompleted) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: isCompleted ? AppColors.primaryGreen : Colors.grey.shade200,
+            shape: BoxShape.circle,
           ),
-          ListTile(
-            leading: const Icon(Icons.local_hospital, color: AppColors.primaryGreen),
-            title: const Text('Ambulance Dispatch'),
-            subtitle: const Text('118'),
-            trailing: IconButton(
-              icon: const Icon(Icons.call, color: AppColors.primaryGreen),
-              onPressed: () {},
-            ),
-            dense: true,
+          child: Icon(icon, color: Colors.white, size: 16),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 8,
+            color: isCompleted ? AppColors.primaryGreen : Colors.grey,
+            fontWeight: isCompleted ? FontWeight.bold : FontWeight.normal,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -4,7 +4,7 @@ import '../../providers/auth_provider.dart';
 import '../../utils/colors.dart';
 
 class RoleRedirectScreen extends StatefulWidget {
-  const RoleRedirectScreen({Key? key}) : super(key: key);
+  const RoleRedirectScreen({super.key});
 
   @override
   State<RoleRedirectScreen> createState() => _RoleRedirectScreenState();

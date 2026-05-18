@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/location_provider.dart';
@@ -21,6 +23,7 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
   String _selectedEmergencyType = 'accident';
   String _selectedSeverity = 'high';
   bool _isLoading = false;
+  List<QueryDocumentSnapshot> _activeDrivers = [];
   
   final List<Map<String, dynamic>> _emergencyTypes = [
     {'value': 'accident', 'label': '🚗 Accident', 'icon': Icons.car_crash},
@@ -38,6 +41,26 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
     {'value': 'high', 'label': 'High', 'color': Colors.deepOrange},
     {'value': 'critical', 'label': 'Critical', 'color': Colors.red},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActiveDrivers();
+  }
+
+  void _loadActiveDrivers() {
+    FirebaseFirestore.instance
+        .collection('users')
+        .where('role', isEqualTo: 'driver')
+        .where('isOnline', isEqualTo: true)
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .listen((snapshot) {
+      setState(() {
+        _activeDrivers = snapshot.docs;
+      });
+    });
+  }
 
   Future<void> _submitRequest() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -57,6 +80,17 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
       return;
     }
     
+    // Check if there are active drivers
+    if (_activeDrivers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No active drivers available. Please try again later.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    
     setState(() => _isLoading = true);
     
     final requestId = await requestProvider.createEmergencyRequest(
@@ -71,33 +105,43 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
     setState(() => _isLoading = false);
     
     if (requestId != null && mounted) {
-      // Show success dialog
+      // Show success dialog with driver info
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Icon(Icons.check_circle, color: Colors.green, size: 60),
-          content: const Column(
+          content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
+              const Text(
                 'Request Sent!',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 8),
-              Text('An ambulance has been dispatched to your location.'),
-              SizedBox(height: 8),
-              Text('You can track the ambulance in real-time.'),
+              const SizedBox(height: 8),
+              const Text('An ambulance has been dispatched to your location.'),
+              const SizedBox(height: 8),
+              Text(
+                '${_activeDrivers.length} active drivers available in your area.',
+                style: TextStyle(fontSize: 12, color: AppColors.grey),
+              ),
             ],
           ),
           actions: [
             CustomButton(
               text: 'Track Ambulance',
               onPressed: () {
-                Navigator.pop(context); // Close dialog
-                Navigator.pop(context); // Go back to home
-                // Navigate to tracking screen
+                Navigator.pop(context);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => Scaffold(
+                      appBar: AppBar(title: Text('Tracking')),
+                      body: Center(child: Text('Tracking screen')),
+                    ),
+                  ),
+                );
               },
             ),
           ],
@@ -137,6 +181,65 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Active Drivers Card
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '🚑 Available Drivers',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.people, color: AppColors.primaryGreen),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${_activeDrivers.length} active driver${_activeDrivers.length != 1 ? 's' : ''} online',
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ],
+                      ),
+                      if (_activeDrivers.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: _activeDrivers.take(3).map((driver) {
+                            final data = driver.data() as Map<String, dynamic>;
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.green.shade200),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.circle, size: 8, color: Colors.green),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    data['fullName']?.split(' ').first ?? 'Driver',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              
+              const SizedBox(height: 16),
+              
               // Location Card
               Card(
                 elevation: 2,

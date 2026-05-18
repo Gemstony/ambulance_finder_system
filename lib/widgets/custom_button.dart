@@ -10,14 +10,14 @@ class CustomButton extends StatelessWidget {
   final double height;
   
   const CustomButton({
-    Key? key,
+    super.key,
     required this.text,
     required this.onPressed,
     this.isLoading = false,
     this.isEmergency = false,
     this.width = double.infinity,
     this.height = 50,
-  }) : super(key: key);
+  });
   
   @override
   Widget build(BuildContext context) {

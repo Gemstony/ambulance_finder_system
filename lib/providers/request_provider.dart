@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart' hide GeoPoint;
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
 import '../models/request_model.dart';
-import '../models/user_model.dart';
 
 class RequestProvider extends ChangeNotifier {
   // Service instance

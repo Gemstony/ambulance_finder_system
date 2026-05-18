@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/request_model.dart' hide GeoPoint;
-import '../models/ambulance_model.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -42,6 +41,10 @@ class FirestoreService {
     }
     return const Stream.empty();
   }
+  // Get all requests (for admin reports)
+Stream<QuerySnapshot> getAllRequests() {
+  return _firestore.collection('requests').orderBy('timestamp', descending: true).snapshots();
+}
   
   // Update request status
   Future<void> updateRequestStatus(String requestId, String status, {String? driverId, String? driverName}) async {

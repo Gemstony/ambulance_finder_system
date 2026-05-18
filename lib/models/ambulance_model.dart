@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'request_model.dart' hide GeoPoint;
 
 class AmbulanceModel {
   // Basic information

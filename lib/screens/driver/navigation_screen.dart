@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/location_provider.dart';
-import '../../providers/request_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../services/gps_service.dart';
 import '../../utils/colors.dart';
@@ -12,6 +13,7 @@ class NavigationScreen extends StatefulWidget {
   final String patientName;
   final double patientLat;
   final double patientLng;
+  final String patientPhone;
 
   const NavigationScreen({
     Key? key,
@@ -19,6 +21,7 @@ class NavigationScreen extends StatefulWidget {
     required this.patientName,
     required this.patientLat,
     required this.patientLng,
+    required this.patientPhone,
   }) : super(key: key);
 
   @override
@@ -31,20 +34,83 @@ class _NavigationScreenState extends State<NavigationScreen> {
   bool _isLoading = false;
   double _currentDistance = 0;
   Duration _currentEta = Duration.zero;
+  LatLng? _currentLocation;
+  
+  GoogleMapController? _mapController;
+  Set<Marker> _markers = {};
+  Set<Polyline> _polylines = {};
 
   @override
   void initState() {
     super.initState();
     _startLocationUpdates();
     _updateRequestStatus('enroute');
+    _setupMarkers();
   }
 
-  void _startLocationUpdates() {
+  void _setupMarkers() {
+    // Patient marker
+    _markers.add(
+      Marker(
+        markerId: const MarkerId('patient'),
+        position: LatLng(widget.patientLat, widget.patientLng),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        infoWindow: InfoWindow(title: widget.patientName, snippet: 'Patient Location'),
+      ),
+    );
+  }
+
+  void _updateDriverMarker(LatLng position) {
+    setState(() {
+      _markers.removeWhere((marker) => marker.markerId.value == 'driver');
+      _markers.add(
+        Marker(
+          markerId: const MarkerId('driver'),
+          position: position,
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          infoWindow: const InfoWindow(title: 'You', snippet: 'Current Location'),
+        ),
+      );
+    });
+  }
+
+  void _drawRoute(LatLng currentPos) {
+    setState(() {
+      _polylines.clear();
+      _polylines.add(
+        Polyline(
+          polylineId: const PolylineId('route'),
+          points: [currentPos, LatLng(widget.patientLat, widget.patientLng)],
+          color: AppColors.primaryGreen,
+          width: 4,
+        ),
+      );
+    });
+  }
+
+  Future<void> _startLocationUpdates() async {
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
-    locationProvider.startTracking(
+    await locationProvider.startTracking(
       onLocationUpdate: (position) async {
-        // Update distance to patient
-        _updateDistanceToPatient(position.latitude, position.longitude);
+        final currentPos = LatLng(position.latitude, position.longitude);
+        setState(() {
+          _currentLocation = currentPos;
+          _currentDistance = GpsService.calculateDistance(
+            position.latitude,
+            position.longitude,
+            widget.patientLat,
+            widget.patientLng,
+          );
+          _currentEta = GpsService.calculateEstimatedTime(_currentDistance);
+        });
+        
+        _updateDriverMarker(currentPos);
+        _drawRoute(currentPos);
+        
+        // Auto zoom to fit if map is initialized
+        if (_mapController != null) {
+          _zoomToFit(currentPos, LatLng(widget.patientLat, widget.patientLng));
+        }
         
         // Update location in Firestore
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -61,17 +127,21 @@ class _NavigationScreenState extends State<NavigationScreen> {
     );
   }
 
-  void _updateDistanceToPatient(double currentLat, double currentLng) {
-    final distance = GpsService.calculateDistance(
-      currentLat,
-      currentLng,
-      widget.patientLat,
-      widget.patientLng,
+  void _zoomToFit(LatLng driver, LatLng patient) {
+    double minLat = driver.latitude < patient.latitude ? driver.latitude : patient.latitude;
+    double maxLat = driver.latitude > patient.latitude ? driver.latitude : patient.latitude;
+    double minLng = driver.longitude < patient.longitude ? driver.longitude : patient.longitude;
+    double maxLng = driver.longitude > patient.longitude ? driver.longitude : patient.longitude;
+    
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(minLat - 0.01, minLng - 0.01),
+          northeast: LatLng(maxLat + 0.01, maxLng + 0.01),
+        ),
+        50,
+      ),
     );
-    setState(() {
-      _currentDistance = distance;
-      _currentEta = GpsService.calculateEstimatedTime(distance);
-    });
   }
 
   Future<void> _updateRequestStatus(String status) async {
@@ -83,7 +153,6 @@ class _NavigationScreenState extends State<NavigationScreen> {
     setState(() => _isLoading = true);
     await _updateRequestStatus('arrived');
     
-    // Show dialog
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -102,12 +171,12 @@ class _NavigationScreenState extends State<NavigationScreen> {
           ],
         ),
         actions: [
-          CustomButton(
-            text: 'Load Patient',
+          TextButton(
             onPressed: () {
               Navigator.pop(context);
               _markAsLoaded();
             },
+            child: const Text('Load Patient'),
           ),
         ],
       ),
@@ -152,241 +221,132 @@ class _NavigationScreenState extends State<NavigationScreen> {
             icon: const Icon(Icons.phone),
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Calling patient...')),
+                SnackBar(content: Text('Calling ${widget.patientPhone}...')),
               );
             },
           ),
         ],
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [AppColors.veryLightGreen, AppColors.white],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Column(
-          children: [
-            // Status Card
-            Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(20),
+      body: Stack(
+        children: [
+          // Google Map
+          if (_currentLocation != null)
+            GoogleMap(
+              onMapCreated: (controller) {
+                _mapController = controller;
+                _zoomToFit(_currentLocation!, LatLng(widget.patientLat, widget.patientLng));
+              },
+              initialCameraPosition: CameraPosition(
+                target: _currentLocation!,
+                zoom: 14,
+              ),
+              markers: _markers,
+              polylines: _polylines,
+              myLocationEnabled: true,
+              myLocationButtonEnabled: true,
+            )
+          else
+            const Center(child: CircularProgressIndicator()),
+          
+          // Bottom Card
+          Positioned(
+            bottom: 16,
+            left: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
-                  BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10),
+                  BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 15),
                 ],
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Patient Info
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryGreen.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(15),
+                          color: AppColors.veryLightGreen,
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.navigation, color: AppColors.primaryGreen, size: 30),
+                        child: const Icon(Icons.person, color: AppColors.primaryGreen),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Destination',
-                              style: TextStyle(fontSize: 12, color: Colors.grey),
-                            ),
-                            const SizedBox(height: 4),
                             Text(
                               widget.patientName,
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                             ),
+                            Text(
+                              widget.patientPhone,
+                              style: TextStyle(fontSize: 12, color: AppColors.grey),
+                            ),
                           ],
                         ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            GpsService.formatDistance(_currentDistance),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryGreen),
+                          ),
+                          Text(
+                            'ETA: ${GpsService.formatDuration(_currentEta)}',
+                            style: const TextStyle(fontSize: 12, color: AppColors.primaryGreen),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  Divider(color: Colors.grey.shade200),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Icon(Icons.straighten, color: AppColors.primaryGreen),
-                            const SizedBox(height: 4),
-                            Text(
-                              GpsService.formatDistance(_currentDistance),
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const Text('Distance', style: TextStyle(fontSize: 10)),
-                          ],
-                        ),
+                  
+                  const SizedBox(height: 12),
+                  
+                  // Action Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isLoading
+                          ? null
+                          : _currentStatus == 'arrived'
+                              ? _markAsLoaded
+                              : _currentStatus == 'patient_loaded'
+                                  ? _completeTrip
+                                  : _markAsArrived,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryGreen,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Icon(Icons.timer, color: Colors.orange),
-                            const SizedBox(height: 4),
-                            Text(
-                              GpsService.formatDuration(_currentEta),
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : Text(
+                              _currentStatus == 'arrived'
+                                  ? '✅ PATIENT LOADED'
+                                  : _currentStatus == 'patient_loaded'
+                                      ? '🏥 COMPLETE TRIP'
+                                      : '📍 MARK AS ARRIVED',
                             ),
-                            const Text('ETA', style: TextStyle(fontSize: 10)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            
-            // Map Placeholder (in real app, use Google Map)
-            Container(
-              margin: const EdgeInsets.all(16),
-              height: 250,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.primaryGreen, width: 2),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.map, size: 60, color: AppColors.primaryGreen),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Map View',
-                    style: TextStyle(color: AppColors.primaryGreen),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Navigation from your location to patient',
-                    style: TextStyle(fontSize: 12, color: AppColors.grey),
-                  ),
-                ],
-              ),
-            ),
-            
-            // Status Timeline
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: _buildStatusTimeline(),
-            ),
-            
-            const Spacer(),
-            
-            // Action Button
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: CustomButton(
-                text: _currentStatus == 'arrived' 
-                    ? '✅ PATIENT LOADED' 
-                    : _currentStatus == 'patient_loaded'
-                        ? '🏥 COMPLETE TRIP'
-                        : '📍 MARK AS ARRIVED',
-                onPressed: _currentStatus == 'arrived'
-                    ? _markAsLoaded
-                    : _currentStatus == 'patient_loaded'
-                        ? _completeTrip
-                        : _markAsArrived,
-                isEmergency: true,
-                height: 55,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusTimeline() {
-    final List<Map<String, dynamic>> steps = [
-      {'label': 'Accepted', 'key': 'accepted', 'icon': Icons.check_circle, 'completed': true},
-      {'label': 'En Route', 'key': 'enroute', 'icon': Icons.directions_car, 'completed': _currentStatus != 'accepted'},
-      {'label': 'Arrived', 'key': 'arrived', 'icon': Icons.location_on, 'completed': _currentStatus == 'arrived' || _currentStatus == 'patient_loaded'},
-      {'label': 'Loaded', 'key': 'patient_loaded', 'icon': Icons.people, 'completed': _currentStatus == 'patient_loaded'},
-    ];
-    
-    return Column(
-      children: [
-        Row(
-          children: List.generate(steps.length, (index) {
-            final step = steps[index];
-            final isCompleted = step['completed'];
-            
-            return Expanded(
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: isCompleted ? AppColors.primaryGreen : Colors.grey.shade200,
-                      shape: BoxShape.circle,
                     ),
-                    child: Icon(step['icon'], color: Colors.white, size: 20),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    step['label'],
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: isCompleted ? AppColors.primaryGreen : AppColors.grey,
-                      fontWeight: isCompleted ? FontWeight.bold : FontWeight.normal,
-                    ),
-                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
-            );
-          }),
-        ),
-      ],
-    );
-  }
-}
-
-class CustomButton extends StatelessWidget {
-  final String text;
-  final VoidCallback onPressed;
-  final bool isEmergency;
-  final double height;
-
-  const CustomButton({
-    Key? key,
-    required this.text,
-    required this.onPressed,
-    this.isEmergency = false,
-    this.height = 50,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: height,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: isEmergency ? AppColors.primaryGreen : AppColors.primaryGreen,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        ),
-        onPressed: onPressed,
-        child: Text(
-          text,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }

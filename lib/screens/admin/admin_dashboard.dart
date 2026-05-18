@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/request_provider.dart';
+import '../../services/firestore_service.dart';
 import '../../utils/colors.dart';
 import 'manage_users.dart';
 import 'live_tracking.dart';
+import 'reports_screen.dart';
+import '../common/profile_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({Key? key}) : super(key: key);
@@ -15,18 +19,63 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = 0;
+  final FirestoreService _firestoreService = FirestoreService();
+  
+  // Real data variables
+  int _totalUsers = 0;
+  int _activeDrivers = 0;
+  int _pendingRequests = 0;
+  int _completedTrips = 0;
+  bool _isLoadingStats = true;
   
   final List<Widget> _screens = [
     const _DashboardHome(),
     const ManageUsers(),
     const LiveTracking(),
+    const ReportsScreen(),
   ];
   
   final List<String> _titles = [
     'Admin Dashboard',
     'Manage Users',
     'Live Tracking',
+    'Reports',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRealTimeStats();
+  }
+  
+  void _loadRealTimeStats() {
+    // Listen to users collection for real-time updates
+    _firestoreService.getAllUsers().listen((snapshot) {
+      if (mounted) {
+        setState(() {
+          _totalUsers = snapshot.docs.length;
+          _activeDrivers = snapshot.docs.where((doc) => 
+            doc['role'] == 'driver' && doc['isActive'] == true
+          ).length;
+        });
+      }
+    });
+    
+    // Listen to requests collection for real-time updates
+    _firestoreService.getAllRequests().listen((snapshot) {
+      if (mounted) {
+        setState(() {
+          _pendingRequests = snapshot.docs.where((doc) => 
+            doc['status'] == 'pending'
+          ).length;
+          _completedTrips = snapshot.docs.where((doc) => 
+            doc['status'] == 'completed'
+          ).length;
+          _isLoadingStats = false;
+        });
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +90,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
+              _loadRealTimeStats();
               setState(() {});
             },
           ),
@@ -52,10 +102,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
         onTap: (index) => setState(() => _selectedIndex = index),
         selectedItemColor: AppColors.primaryGreen,
         unselectedItemColor: AppColors.grey,
+        type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
           BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Users'),
           BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Live Map'),
+          BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'Reports'),
         ],
       ),
     );
@@ -81,19 +133,34 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     backgroundColor: Colors.white,
                     child: Text(
                       userData?.initials ?? 'A',
-                      style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primaryGreen),
+                      style: const TextStyle(
+                        fontSize: 32, 
+                        fontWeight: FontWeight.bold, 
+                        color: AppColors.primaryGreen
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Text(userData?.fullName ?? 'Admin', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(
+                    userData?.fullName ?? 'Admin',
+                    style: const TextStyle(
+                      color: Colors.white, 
+                      fontSize: 18, 
+                      fontWeight: FontWeight.bold
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text(userData?.email ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(
+                    userData?.email ?? '',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
                 ],
               ),
             ),
             ListTile(
               leading: const Icon(Icons.dashboard),
               title: const Text('Dashboard'),
+              tileColor: _selectedIndex == 0 ? AppColors.veryLightGreen : null,
               onTap: () {
                 setState(() => _selectedIndex = 0);
                 Navigator.pop(context);
@@ -102,6 +169,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ListTile(
               leading: const Icon(Icons.people),
               title: const Text('Manage Users'),
+              tileColor: _selectedIndex == 1 ? AppColors.veryLightGreen : null,
               onTap: () {
                 setState(() => _selectedIndex = 1);
                 Navigator.pop(context);
@@ -110,23 +178,41 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ListTile(
               leading: const Icon(Icons.map),
               title: const Text('Live Tracking'),
+              tileColor: _selectedIndex == 2 ? AppColors.veryLightGreen : null,
               onTap: () {
                 setState(() => _selectedIndex = 2);
                 Navigator.pop(context);
               },
             ),
             ListTile(
-              leading: const Icon(Icons.bar_chart),
+              leading: const Icon(Icons.receipt),
               title: const Text('Reports'),
-              onTap: () => Navigator.pop(context),
+              tileColor: _selectedIndex == 3 ? AppColors.veryLightGreen : null,
+              onTap: () {
+                setState(() => _selectedIndex = 3);
+                Navigator.pop(context);
+              },
             ),
             const Divider(),
+            ListTile(
+              leading: const Icon(Icons.person_outline),
+              title: const Text('My Profile'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                );
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
               title: const Text('Logout', style: TextStyle(color: Colors.red)),
               onTap: () async {
                 await authProvider.logout();
-                if (context.mounted) Navigator.pushReplacementNamed(context, '/login');
+                if (context.mounted) {
+                  Navigator.pushReplacementNamed(context, '/login');
+                }
               },
             ),
           ],
@@ -136,7 +222,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 }
 
-// Dashboard Home Widget
+// Dashboard Home Widget - With Real Data
 class _DashboardHome extends StatefulWidget {
   const _DashboardHome({Key? key}) : super(key: key);
 
@@ -145,23 +231,60 @@ class _DashboardHome extends StatefulWidget {
 }
 
 class _DashboardHomeState extends State<_DashboardHome> {
+  final FirestoreService _firestoreService = FirestoreService();
+  
+  int _totalUsers = 0;
+  int _activeDrivers = 0;
+  int _pendingRequests = 0;
+  int _completedTrips = 0;
+  bool _isLoading = true;
+  
+  List<QueryDocumentSnapshot> _recentRequests = [];
+
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadDashboardData();
   }
-
-  void _loadData() {
-    final requestProvider = Provider.of<RequestProvider>(context, listen: false);
-    requestProvider.listenToPendingRequests();
+  
+  void _loadDashboardData() {
+    // Get users data
+    _firestoreService.getAllUsers().listen((userSnapshot) {
+      if (mounted) {
+        setState(() {
+          _totalUsers = userSnapshot.docs.length;
+          _activeDrivers = userSnapshot.docs.where((doc) => 
+            doc['role'] == 'driver' && doc['isActive'] == true && doc['isOnline'] == true
+          ).length;
+        });
+      }
+    });
+    
+    // Get requests data
+    _firestoreService.getAllRequests().listen((requestSnapshot) {
+      if (mounted) {
+        setState(() {
+          _pendingRequests = requestSnapshot.docs.where((doc) => 
+            doc['status'] == 'pending'
+          ).length;
+          _completedTrips = requestSnapshot.docs.where((doc) => 
+            doc['status'] == 'completed'
+          ).length;
+          
+          // Get recent 5 requests
+          _recentRequests = requestSnapshot.docs
+              .where((doc) => doc['status'] == 'pending')
+              .take(5)
+              .toList();
+          
+          _isLoading = false;
+        });
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final requestProvider = Provider.of<RequestProvider>(context);
-    final pendingCount = requestProvider.pendingRequests.length;
-    final activeCount = requestProvider.userRequests.where((r) => r.isActive).length;
-    
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -170,148 +293,183 @@ class _DashboardHomeState extends State<_DashboardHome> {
           end: Alignment.bottomCenter,
         ),
       ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // Stats Grid
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              children: [
-                _buildStatCard('Total Users', '0', Icons.people, Colors.blue),
-                _buildStatCard('Active Drivers', '0', Icons.airport_shuttle, AppColors.primaryGreen),
-                _buildStatCard('Pending Requests', '$pendingCount', Icons.pending, Colors.orange),
-                _buildStatCard('Completed Trips', '0', Icons.check_circle, Colors.green),
-              ],
-            ),
-            
-            const SizedBox(height: 24),
-            
-            // Quick Actions
-            const Text(
-              'Quick Actions',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildActionCard(
-                    title: 'Manage Users',
-                    icon: Icons.people,
-                    color: Colors.blue,
-                    onTap: () {},
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildActionCard(
-                    title: 'Live Tracking',
-                    icon: Icons.map,
-                    color: AppColors.primaryGreen,
-                    onTap: () {},
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildActionCard(
-                    title: 'View Reports',
-                    icon: Icons.bar_chart,
-                    color: Colors.purple,
-                    onTap: () {},
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildActionCard(
-                    title: 'Emergency Alerts',
-                    icon: Icons.notifications_active,
-                    color: Colors.red,
-                    onTap: () {},
-                  ),
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: 24),
-            
-            // Recent Requests
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
+      child: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(12),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Stats Grid - Smaller Cards
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.3,
+                    children: [
+                      _buildStatCard(
+                        title: 'Total Users',
+                        value: '$_totalUsers',
+                        icon: Icons.people,
+                        color: Colors.blue,
+                      ),
+                      _buildStatCard(
+                        title: 'Active Drivers',
+                        value: '$_activeDrivers',
+                        icon: Icons.airport_shuttle,
+                        color: AppColors.primaryGreen,
+                      ),
+                      _buildStatCard(
+                        title: 'Pending Requests',
+                        value: '$_pendingRequests',
+                        icon: Icons.pending,
+                        color: Colors.orange,
+                      ),
+                      _buildStatCard(
+                        title: 'Completed Trips',
+                        value: '$_completedTrips',
+                        icon: Icons.check_circle,
+                        color: Colors.green,
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Quick Actions - Working Buttons
                   const Text(
-                    'Recent Emergency Requests',
+                    'Quick Actions',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 12),
-                  if (pendingCount == 0)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(32),
-                        child: Text('No pending requests'),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildActionButton(
+                          title: 'Manage Users',
+                          icon: Icons.people,
+                          color: Colors.blue,
+                          onTap: () {
+                            // This will be handled by parent
+                          },
+                        ),
                       ),
-                    )
-                  else
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: pendingCount > 3 ? 3 : pendingCount,
-                      itemBuilder: (context, index) {
-                        final request = requestProvider.pendingRequests[index];
-                        return _buildRecentRequestCard(request);
-                      },
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildActionButton(
+                          title: 'Live Tracking',
+                          icon: Icons.map,
+                          color: AppColors.primaryGreen,
+                          onTap: () {},
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildActionButton(
+                          title: 'View Reports',
+                          icon: Icons.receipt,
+                          color: Colors.purple,
+                          onTap: () {},
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _buildActionButton(
+                          title: 'My Profile',
+                          icon: Icons.person,
+                          color: AppColors.primaryGreen,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // Recent Requests
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Recent Emergency Requests',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        if (_recentRequests.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Center(child: Text('No pending requests')),
+                          )
+                        else
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _recentRequests.length > 3 ? 3 : _recentRequests.length,
+                            itemBuilder: (context, index) {
+                              final request = _recentRequests[index];
+                              final data = request.data() as Map<String, dynamic>;
+                              return _buildRecentRequestCard(data);
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-          ],
-        ),
-      ),
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10),
+          BoxShadow(color: Colors.grey.withOpacity(0.08), blurRadius: 5),
         ],
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: color, size: 28),
+            child: Icon(icon, color: color, size: 22),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             value,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           Text(
             title,
-            style: TextStyle(fontSize: 12, color: AppColors.grey),
+            style: TextStyle(fontSize: 10, color: AppColors.grey),
             textAlign: TextAlign.center,
           ),
         ],
@@ -319,7 +477,7 @@ class _DashboardHomeState extends State<_DashboardHome> {
     );
   }
 
-  Widget _buildActionCard({
+  Widget _buildActionButton({
     required String title,
     required IconData icon,
     required Color color,
@@ -328,21 +486,21 @@ class _DashboardHomeState extends State<_DashboardHome> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(10),
           boxShadow: [
-            BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10),
+            BoxShadow(color: Colors.grey.withOpacity(0.08), blurRadius: 5),
           ],
         ),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 32),
-            const SizedBox(height: 8),
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 4),
             Text(
               title,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
               textAlign: TextAlign.center,
             ),
           ],
@@ -351,42 +509,42 @@ class _DashboardHomeState extends State<_DashboardHome> {
     );
   }
 
-  Widget _buildRecentRequestCard(request) {
+  Widget _buildRecentRequestCard(Map<String, dynamic> request) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.veryLightGreen,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
-          const Icon(Icons.emergency, color: AppColors.darkRed),
-          const SizedBox(width: 12),
+          const Icon(Icons.emergency, color: AppColors.darkRed, size: 18),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  request.patientName,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  request['patientName'] ?? 'Unknown',
+                  style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
                 ),
                 Text(
-                  _formatTime(request.timestamp),
+                  _formatTime(request['timestamp']),
                   style: TextStyle(fontSize: 10, color: AppColors.grey),
                 ),
               ],
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               color: Colors.orange.shade100,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
-              request.status,
-              style: TextStyle(fontSize: 10, color: Colors.orange.shade700),
+              request['status'] ?? 'pending',
+              style: TextStyle(fontSize: 9, color: Colors.orange.shade700),
             ),
           ),
         ],
@@ -394,7 +552,14 @@ class _DashboardHomeState extends State<_DashboardHome> {
     );
   }
 
-  String _formatTime(DateTime time) {
+  String _formatTime(dynamic timestamp) {
+    if (timestamp == null) return 'Just now';
+    DateTime time;
+    if (timestamp is Timestamp) {
+      time = timestamp.toDate();
+    } else {
+      time = DateTime.parse(timestamp.toString());
+    }
     final diff = DateTime.now().difference(time);
     if (diff.inMinutes < 1) return 'Just now';
     if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
