@@ -11,7 +11,7 @@ import 'reports_screen.dart';
 import '../common/profile_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
-  const AdminDashboard({Key? key}) : super(key: key);
+  const AdminDashboard({super.key});
 
   @override
   State<AdminDashboard> createState() => _AdminDashboardState();
@@ -224,7 +224,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
 // Dashboard Home Widget - With Real Data
 class _DashboardHome extends StatefulWidget {
-  const _DashboardHome({Key? key}) : super(key: key);
+  const _DashboardHome({super.key});
 
   @override
   State<_DashboardHome> createState() => _DashboardHomeState();

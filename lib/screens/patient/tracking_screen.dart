@@ -9,7 +9,7 @@ import '../../providers/location_provider.dart';
 import '../../utils/colors.dart';
 
 class TrackingScreen extends StatefulWidget {
-  const TrackingScreen({Key? key}) : super(key: key);
+  const TrackingScreen({super.key});
 
   @override
   State<TrackingScreen> createState() => _TrackingScreenState();
@@ -17,7 +17,7 @@ class TrackingScreen extends StatefulWidget {
 
 class _TrackingScreenState extends State<TrackingScreen> {
   GoogleMapController? _mapController;
-  Completer<GoogleMapController> _controller = Completer();
+  final Completer<GoogleMapController> _controller = Completer();
   
   LatLng? _patientLocation;
   LatLng? _driverLocation;
@@ -27,8 +27,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
   String _driverName = 'Assigning driver...';
   String _driverPhone = '';
   
-  Set<Marker> _markers = {};
-  Set<Polyline> _polylines = {};
+  final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
   
   StreamSubscription? _driverLocationSubscription;
   StreamSubscription? _requestSubscription;

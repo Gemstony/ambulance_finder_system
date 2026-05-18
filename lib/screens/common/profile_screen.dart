@@ -6,7 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../utils/colors.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({Key? key}) : super(key: key);
+  const ProfileScreen({super.key});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -15,7 +15,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _isEditing = false;
   bool _isLoading = false;
-  bool _showPasswordDialog = false;
+  final bool _showPasswordDialog = false;
   
   late TextEditingController _fullNameController;
   late TextEditingController _phoneController;
@@ -425,7 +425,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 20),
                     
                     // Change Password Button
-                    Container(
+                    SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: _showChangePasswordDialog,

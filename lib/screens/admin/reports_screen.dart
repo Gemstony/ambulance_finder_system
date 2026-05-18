@@ -8,7 +8,7 @@ import '../../services/firestore_service.dart';
 import '../../utils/colors.dart';
 
 class ReportsScreen extends StatefulWidget {
-  const ReportsScreen({Key? key}) : super(key: key);
+  const ReportsScreen({super.key});
 
   @override
   State<ReportsScreen> createState() => _ReportsScreenState();

@@ -12,7 +12,7 @@ import 'tracking_screen.dart';
 import '../common/profile_screen.dart';
 
 class PatientHome extends StatefulWidget {
-  const PatientHome({Key? key}) : super(key: key);
+  const PatientHome({super.key});
 
   @override
   State<PatientHome> createState() => _PatientHomeState();

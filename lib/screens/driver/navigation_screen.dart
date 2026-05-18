@@ -16,13 +16,13 @@ class NavigationScreen extends StatefulWidget {
   final String patientPhone;
 
   const NavigationScreen({
-    Key? key,
+    super.key,
     required this.requestId,
     required this.patientName,
     required this.patientLat,
     required this.patientLng,
     required this.patientPhone,
-  }) : super(key: key);
+  });
 
   @override
   State<NavigationScreen> createState() => _NavigationScreenState();
@@ -37,8 +37,8 @@ class _NavigationScreenState extends State<NavigationScreen> {
   LatLng? _currentLocation;
   
   GoogleMapController? _mapController;
-  Set<Marker> _markers = {};
-  Set<Polyline> _polylines = {};
+  final Set<Marker> _markers = {};
+  final Set<Polyline> _polylines = {};
 
   @override
   void initState() {

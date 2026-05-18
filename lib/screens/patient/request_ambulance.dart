@@ -10,7 +10,7 @@ import '../../widgets/custom_textfield.dart';
 import '../../utils/colors.dart';
 
 class RequestAmbulance extends StatefulWidget {
-  const RequestAmbulance({Key? key}) : super(key: key);
+  const RequestAmbulance({super.key});
 
   @override
   State<RequestAmbulance> createState() => _RequestAmbulanceState();
@@ -286,7 +286,7 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
-              Container(
+              SizedBox(
                 height: 120,
                 child: GridView.builder(
                   shrinkWrap: true,
