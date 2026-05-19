@@ -32,7 +32,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   String _currentStatus = 'accepted';
   bool _isLoading = false;
-  double _currentDistance = 0;
+  double _currentDistanceMeters = 0;
   Duration _currentEta = Duration.zero;
   LatLng? _currentLocation;
 
@@ -59,17 +59,22 @@ class _NavigationScreenState extends State<NavigationScreen> {
     ];
   }
 
-  void _updateDriverMarker(LatLng position) {
+  void _updateMarkers(LatLng driverPos) {
     setState(() {
-      _markers.removeWhere((m) => m.point == _currentLocation);
-      _markers.add(
+      _markers = [
         Marker(
-          point: position,
+          point: LatLng(widget.patientLat, widget.patientLng),
+          width: 80,
+          height: 80,
+          child: const Icon(Icons.location_on, color: Colors.red, size: 40),
+        ),
+        Marker(
+          point: driverPos,
           width: 80,
           height: 80,
           child: const Icon(Icons.directions_car, color: Colors.blue, size: 40),
         ),
-      );
+      ];
     });
   }
 
@@ -86,32 +91,33 @@ class _NavigationScreenState extends State<NavigationScreen> {
   }
 
   Future<void> _startLocationUpdates() async {
-    final locationProvider = Provider.of<LocationProvider>(
-      context,
-      listen: false,
-    );
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
     await locationProvider.startTracking(
       onLocationUpdate: (position) async {
         final currentPos = LatLng(position.latitude, position.longitude);
+        
+        // Calculate distance in meters
+        final distanceMeters = GpsService.calculateDistance(
+          position.latitude,
+          position.longitude,
+          widget.patientLat,
+          widget.patientLng,
+        );
+        
         setState(() {
           _currentLocation = currentPos;
-          _currentDistance = GpsService.calculateDistance(
-            position.latitude,
-            position.longitude,
-            widget.patientLat,
-            widget.patientLng,
-          );
-          _currentEta = GpsService.calculateEstimatedTime(_currentDistance);
+          _currentDistanceMeters = distanceMeters;
+          _currentEta = GpsService.calculateEstimatedTime(distanceMeters);
         });
-        _updateDriverMarker(currentPos);
+        
+        _updateMarkers(currentPos);
         _drawRoute(currentPos);
-        if (_mapController != null)
+        
+        if (_mapController != null) {
           _zoomToFit(currentPos, LatLng(widget.patientLat, widget.patientLng));
+        }
 
-        final user = Provider.of<AuthProvider>(
-          context,
-          listen: false,
-        ).currentUser;
+        final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
         if (user != null) {
           await _firestoreService.updateDriverLocation(
             user.uid,
@@ -127,19 +133,13 @@ class _NavigationScreenState extends State<NavigationScreen> {
   void _zoomToFit(LatLng driver, LatLng patient) {
     final midLat = (driver.latitude + patient.latitude) / 2;
     final midLng = (driver.longitude + patient.longitude) / 2;
-    final maxSpan =
-        (driver.latitude - patient.latitude).abs() >
-            (driver.longitude - patient.longitude).abs()
-        ? (driver.latitude - patient.latitude).abs()
-        : (driver.longitude - patient.longitude).abs();
+    final latDiff = (driver.latitude - patient.latitude).abs();
+    final lngDiff = (driver.longitude - patient.longitude).abs();
+    final maxSpan = latDiff > lngDiff ? latDiff : lngDiff;
     double zoom = 14;
-    if (maxSpan > 0.2) {
-      zoom = 10;
-    } else if (maxSpan > 0.1) {
-      zoom = 11.5;
-    } else if (maxSpan > 0.05) {
-      zoom = 13;
-    }
+    if (maxSpan > 0.2) zoom = 10;
+    else if (maxSpan > 0.1) zoom = 11.5;
+    else if (maxSpan > 0.05) zoom = 13;
     _mapController?.move(LatLng(midLat, midLng), zoom);
   }
 
@@ -156,7 +156,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Driver Arrived'),
-          content: const Text('The ambulance has been marked as arrived.'),
+          content: const Text('The ambulance has been marked as arrived. The patient will now confirm.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -169,25 +169,11 @@ class _NavigationScreenState extends State<NavigationScreen> {
     setState(() => _isLoading = false);
   }
 
-  Future<void> _markAsLoaded() async {
-    setState(() => _isLoading = true);
-    await _updateRequestStatus('patient_loaded');
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Patient has been loaded.')));
-    }
-    setState(() => _isLoading = false);
-  }
-
-  Future<void> _completeTrip() async {
-    setState(() => _isLoading = true);
-    await _updateRequestStatus('completed');
-    if (mounted) Navigator.pushReplacementNamed(context, '/driver-home');
-  }
-
   @override
   Widget build(BuildContext context) {
+    final distanceKm = _currentDistanceMeters / 1000;
+    final etaMinutes = _currentEta.inMinutes;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Navigate to ${widget.patientName}'),
@@ -218,9 +204,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
             left: 16,
             right: 16,
             child: Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
               elevation: 8,
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -230,38 +214,28 @@ class _NavigationScreenState extends State<NavigationScreen> {
                   children: [
                     Text(
                       'Patient: ${widget.patientName}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Distance: ${_currentDistance.toStringAsFixed(1)} km',
-                        ),
-                        Text(
-                          'ETA: ${_currentEta.inMinutes > 0 ? '${_currentEta.inMinutes} min' : 'Calculating'}',
-                        ),
+                        Text('Distance: ${distanceKm.toStringAsFixed(1)} km'),
+                        Text('ETA: ${etaMinutes > 0 ? "$etaMinutes min" : "Calculating"}'),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      'Phone: ${widget.patientPhone}',
-                      style: const TextStyle(color: Colors.black54),
-                    ),
+                    Text('Phone: ${widget.patientPhone}', style: const TextStyle(color: Colors.black54)),
                     const SizedBox(height: 16),
                     Row(
                       children: [
                         Expanded(
                           child: ElevatedButton(
                             onPressed: _isLoading ? null : _markAsArrived,
+                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryGreen),
                             child: const Text('Arrived at Patient'),
                           ),
                         ),
-                        // Remove Loaded and Complete buttons
                       ],
                     ),
                   ],

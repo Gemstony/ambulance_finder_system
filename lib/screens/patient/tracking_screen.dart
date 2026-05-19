@@ -27,7 +27,6 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   List<Marker> _markers = [];
   List<Polyline> _polylines = [];
-
   StreamSubscription? _driverLocationSubscription;
   StreamSubscription? _requestSubscription;
 
@@ -37,6 +36,33 @@ class _TrackingScreenState extends State<TrackingScreen> {
     _loadPatientLocation();
     _getActiveRequest();
   }
+
+
+  void _updateMarkers() {
+    if (_patientLocation == null) return;
+    final markers = <Marker>[
+      Marker(
+        point: _patientLocation!,
+        width: 80,
+        height: 80,
+        child: const Icon(Icons.person, color: Colors.red, size: 40),
+      ),
+    ];
+    if (_driverLocation != null) {
+      markers.add(
+        Marker(
+          point: _driverLocation!,
+          width: 80,
+          height: 80,
+          child: const Icon(Icons.local_hospital, color: Colors.blue, size: 40),
+        ),
+      );
+    }
+    setState(() {
+      _markers = markers;
+    });
+  }
+
 
   Future<void> _loadPatientLocation() async {
     final locationProvider = Provider.of<LocationProvider>(
@@ -147,14 +173,23 @@ class _TrackingScreenState extends State<TrackingScreen> {
               _driverId = data['driverId'];
               _driverName = data['driverName'] ?? 'Assigning driver...';
               _driverPhone = data['driverPhone'] ?? '';
+
+              // Get patient location from request data
+              final geo = data['patientLocation'];
+              if (geo != null) {
+                if (geo is GeoPoint) {
+                  _patientLocation = LatLng(geo.latitude, geo.longitude);
+                } else if (geo is Map) {
+                  _patientLocation = LatLng(geo['latitude'], geo['longitude']);
+                }
+                _updateMarkers();
+              }
             });
-            if (_driverId != null && _driverId!.isNotEmpty)
+            if (_driverId != null && _driverId!.isNotEmpty) {
               _listenToDriverLocation(_driverId!);
+            }
           } else {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('No active request')));
-            Navigator.pop(context);
+            // No active request
           }
         });
   }
@@ -172,6 +207,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
               setState(() {
                 _driverLocation = LatLng(location.latitude, location.longitude);
                 _updateDriverMarker();
+                _updateMarkers();
                 _drawRoute();
               });
               if (_mapController != null &&
@@ -201,7 +237,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   String _formatEta(double km) {
     if (km <= 0) return 'Calculating...';
-    final minutes = (km / 0.6).round();
+    // Assume average speed 40 km/h -> 0.666 km per minute
+    final minutes = (km / 0.666).round();
     return '$minutes min';
   }
 
