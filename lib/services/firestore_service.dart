@@ -16,13 +16,13 @@ class FirestoreService {
   }
   
   // Get pending requests (for drivers)
-  Stream<QuerySnapshot> getPendingRequests() {
-    return _firestore
-        .collection('requests')
-        .where('status', isEqualTo: 'pending')
-        .orderBy('timestamp', descending: false)
-        .snapshots();
-  }
+Stream<QuerySnapshot> getPendingRequests() {
+  return _firestore
+      .collection('requests')
+      .where('status', isEqualTo: 'pending')
+      .orderBy('timestamp', descending: false)
+      .snapshots();
+}
   
   // Get user's request history
   Stream<QuerySnapshot> getUserRequests(String userId, String role) {
@@ -121,4 +121,38 @@ Stream<QuerySnapshot> getAllRequests() {
     
     return nearbyDrivers;
   }
+
+    // Add this method to track driver rejections
+  Future<void> addRejectedDriver(String requestId, String driverId) async {
+    // Store rejection in a subcollection of the request
+    await _firestore
+        .collection('requests')
+        .doc(requestId)
+        .collection('rejected_drivers')
+        .doc(driverId)
+        .set({
+      'driverId': driverId,
+      'rejectedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // In your FirestoreService class
+
+Future<bool> hasDriverRejected(String requestId, String driverId) async {
+  try {
+    // Reference to the specific document in the rejected_drivers subcollection
+    final docRef = _firestore
+        .collection('requests')
+        .doc(requestId)
+        .collection('rejected_drivers')
+        .doc(driverId);
+        
+    final docSnapshot = await docRef.get();
+    // Returns true if the document exists, false otherwise
+    return docSnapshot.exists;
+  } catch (e) {
+    print("Error checking if driver has rejected: $e");
+    return false; // Return false in case of error to avoid breaking the app
+  }
+}
 }

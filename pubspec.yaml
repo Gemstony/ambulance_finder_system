@@ -37,7 +37,8 @@ dependencies:
   excel: ^2.0.0
   share_plus: ^7.0.0
   path_provider: ^2.1.0
-  google_maps_flutter: ^2.10.0
+  flutter_map: ^8.0.0  # The main map package
+  latlong2: ^0.9.0     # For handling Latitude/Longitude objects
 
 dev_dependencies:
   flutter_test:
@@ -53,6 +54,7 @@ dev_dependencies:
   geocoding:
   flutter_polyline_points:
   provider:
+# for messages
   flutter_local_notifications:
 
   # The "flutter_lints" package below contains a set of recommended lints to

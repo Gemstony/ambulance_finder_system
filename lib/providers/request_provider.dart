@@ -80,18 +80,26 @@ class RequestProvider extends ChangeNotifier {
   // ============================================================
   // GET PENDING REQUESTS (FOR DRIVERS)
   // ============================================================
-  void listenToPendingRequests() {
-    _firestoreService.getPendingRequests().listen((snapshot) {
-      _pendingRequests = snapshot.docs.map((doc) {
-        return RequestModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
-      }).toList();
-      
-      // Sort by timestamp (oldest first)
-      _pendingRequests.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      
-      notifyListeners();
-    });
-  }
+void listenToPendingRequests(String driverId) {
+  _firestoreService.getPendingRequests().listen((snapshot) async {
+    List<RequestModel> allRequests = snapshot.docs.map((doc) {
+      return RequestModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
+    }).toList();
+
+    // Filter out requests that this driver has already rejected
+    List<RequestModel> filtered = [];
+    for (var request in allRequests) {
+      bool rejected = await _firestoreService.hasDriverRejected(request.requestId, driverId);
+      if (!rejected) {
+        filtered.add(request);
+      }
+    }
+
+    _pendingRequests = filtered;
+    _pendingRequests.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    notifyListeners();
+  });
+}
   
   // ============================================================
   // GET USER SPECIFIC REQUESTS
@@ -132,7 +140,7 @@ class RequestProvider extends ChangeNotifier {
         driverName: driverName,
       );
       
-      // Notify patient that request was accepted
+      //TODO: Notify patient that request was accepted
       await NotificationService.showNotification(
         id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
         title: '✅ Request Accepted',
@@ -149,7 +157,7 @@ class RequestProvider extends ChangeNotifier {
   }
   
   // ============================================================
-  // UPDATE REQUEST STATUS
+  // TODO: UPDATE REQUEST STATUS
   // ============================================================
   Future<bool> updateRequestStatus(String requestId, String status) async {
     _setLoading(true);
@@ -267,4 +275,40 @@ class RequestProvider extends ChangeNotifier {
     _isLoading = loading;
     notifyListeners();
   }
+
+// Inside RequestProvider
+
+// Driver rejects request
+Future<bool> rejectRequest(String requestId, String driverId) async {
+  _setLoading(true);
+  try {
+    await _firestoreService.addRejectedDriver(requestId, driverId);
+    // Optionally, remove this request from local pendingRequests list
+    _pendingRequests.removeWhere((req) => req.requestId == requestId);
+    notifyListeners();
+    _setLoading(false);
+    return true;
+  } catch (e) {
+    _errorMessage = 'Failed to reject: $e';
+    _setLoading(false);
+    return false;
+  }
+}
+
+// Patient confirms arrival
+Future<bool> confirmArrival(String requestId) async {
+  _setLoading(true);
+  try {
+    await _firestoreService.updateRequestStatus(requestId, 'completed');
+    _activeRequest = null;
+    // Also remove from userRequests? Optional
+    notifyListeners();
+    _setLoading(false);
+    return true;
+  } catch (e) {
+    _errorMessage = 'Failed to confirm arrival: $e';
+    _setLoading(false);
+    return false;
+  }
+}
 }

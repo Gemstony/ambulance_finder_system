@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/location_provider.dart';
@@ -35,10 +35,10 @@ class _NavigationScreenState extends State<NavigationScreen> {
   double _currentDistance = 0;
   Duration _currentEta = Duration.zero;
   LatLng? _currentLocation;
-  
-  GoogleMapController? _mapController;
-  final Set<Marker> _markers = {};
-  final Set<Polyline> _polylines = {};
+
+  MapController? _mapController;
+  List<Marker> _markers = [];
+  List<Polyline> _polylines = [];
 
   @override
   void initState() {
@@ -49,26 +49,25 @@ class _NavigationScreenState extends State<NavigationScreen> {
   }
 
   void _setupMarkers() {
-    // Patient marker
-    _markers.add(
+    _markers = [
       Marker(
-        markerId: const MarkerId('patient'),
-        position: LatLng(widget.patientLat, widget.patientLng),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        infoWindow: InfoWindow(title: widget.patientName, snippet: 'Patient Location'),
+        point: LatLng(widget.patientLat, widget.patientLng),
+        width: 80,
+        height: 80,
+        child: const Icon(Icons.location_on, color: Colors.red, size: 40),
       ),
-    );
+    ];
   }
 
   void _updateDriverMarker(LatLng position) {
     setState(() {
-      _markers.removeWhere((marker) => marker.markerId.value == 'driver');
+      _markers.removeWhere((m) => m.point == _currentLocation);
       _markers.add(
         Marker(
-          markerId: const MarkerId('driver'),
-          position: position,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-          infoWindow: const InfoWindow(title: 'You', snippet: 'Current Location'),
+          point: position,
+          width: 80,
+          height: 80,
+          child: const Icon(Icons.directions_car, color: Colors.blue, size: 40),
         ),
       );
     });
@@ -76,20 +75,21 @@ class _NavigationScreenState extends State<NavigationScreen> {
 
   void _drawRoute(LatLng currentPos) {
     setState(() {
-      _polylines.clear();
-      _polylines.add(
+      _polylines = [
         Polyline(
-          polylineId: const PolylineId('route'),
           points: [currentPos, LatLng(widget.patientLat, widget.patientLng)],
+          strokeWidth: 4,
           color: AppColors.primaryGreen,
-          width: 4,
         ),
-      );
+      ];
     });
   }
 
   Future<void> _startLocationUpdates() async {
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    final locationProvider = Provider.of<LocationProvider>(
+      context,
+      listen: false,
+    );
     await locationProvider.startTracking(
       onLocationUpdate: (position) async {
         final currentPos = LatLng(position.latitude, position.longitude);
@@ -103,18 +103,15 @@ class _NavigationScreenState extends State<NavigationScreen> {
           );
           _currentEta = GpsService.calculateEstimatedTime(_currentDistance);
         });
-        
         _updateDriverMarker(currentPos);
         _drawRoute(currentPos);
-        
-        // Auto zoom to fit if map is initialized
-        if (_mapController != null) {
+        if (_mapController != null)
           _zoomToFit(currentPos, LatLng(widget.patientLat, widget.patientLng));
-        }
-        
-        // Update location in Firestore
-        final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        final user = authProvider.currentUser;
+
+        final user = Provider.of<AuthProvider>(
+          context,
+          listen: false,
+        ).currentUser;
         if (user != null) {
           await _firestoreService.updateDriverLocation(
             user.uid,
@@ -128,20 +125,22 @@ class _NavigationScreenState extends State<NavigationScreen> {
   }
 
   void _zoomToFit(LatLng driver, LatLng patient) {
-    double minLat = driver.latitude < patient.latitude ? driver.latitude : patient.latitude;
-    double maxLat = driver.latitude > patient.latitude ? driver.latitude : patient.latitude;
-    double minLng = driver.longitude < patient.longitude ? driver.longitude : patient.longitude;
-    double maxLng = driver.longitude > patient.longitude ? driver.longitude : patient.longitude;
-    
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(minLat - 0.01, minLng - 0.01),
-          northeast: LatLng(maxLat + 0.01, maxLng + 0.01),
-        ),
-        50,
-      ),
-    );
+    final midLat = (driver.latitude + patient.latitude) / 2;
+    final midLng = (driver.longitude + patient.longitude) / 2;
+    final maxSpan =
+        (driver.latitude - patient.latitude).abs() >
+            (driver.longitude - patient.longitude).abs()
+        ? (driver.latitude - patient.latitude).abs()
+        : (driver.longitude - patient.longitude).abs();
+    double zoom = 14;
+    if (maxSpan > 0.2) {
+      zoom = 10;
+    } else if (maxSpan > 0.1) {
+      zoom = 11.5;
+    } else if (maxSpan > 0.05) {
+      zoom = 13;
+    }
+    _mapController?.move(LatLng(midLat, midLng), zoom);
   }
 
   Future<void> _updateRequestStatus(String status) async {
@@ -152,60 +151,39 @@ class _NavigationScreenState extends State<NavigationScreen> {
   Future<void> _markAsArrived() async {
     setState(() => _isLoading = true);
     await _updateRequestStatus('arrived');
-    
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Icon(Icons.check_circle, color: Colors.green, size: 60),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Arrived at Location!',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+    if (mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Driver Arrived'),
+          content: const Text('The ambulance has been marked as arrived.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
             ),
-            SizedBox(height: 8),
-            Text('You have arrived at the patient\'s location.'),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _markAsLoaded();
-            },
-            child: const Text('Load Patient'),
-          ),
-        ],
-      ),
-    );
-    
+      );
+    }
     setState(() => _isLoading = false);
   }
 
   Future<void> _markAsLoaded() async {
     setState(() => _isLoading = true);
     await _updateRequestStatus('patient_loaded');
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Patient loaded. Proceed to hospital.'),
-        backgroundColor: Colors.green,
-      ),
-    );
-    
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Patient has been loaded.')));
+    }
     setState(() => _isLoading = false);
   }
 
   Future<void> _completeTrip() async {
     setState(() => _isLoading = true);
     await _updateRequestStatus('completed');
-    
-    if (mounted) {
-      Navigator.pushReplacementNamed(context, '/driver-home');
-    }
+    if (mounted) Navigator.pushReplacementNamed(context, '/driver-home');
   }
 
   @override
@@ -214,135 +192,80 @@ class _NavigationScreenState extends State<NavigationScreen> {
       appBar: AppBar(
         title: Text('Navigate to ${widget.patientName}'),
         backgroundColor: AppColors.primaryGreen,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.phone),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Calling ${widget.patientPhone}...')),
-              );
-            },
-          ),
-        ],
       ),
       body: Stack(
         children: [
-          // Google Map
           if (_currentLocation != null)
-            GoogleMap(
-              onMapCreated: (controller) {
-                _mapController = controller;
-                _zoomToFit(_currentLocation!, LatLng(widget.patientLat, widget.patientLng));
-              },
-              initialCameraPosition: CameraPosition(
-                target: _currentLocation!,
-                zoom: 14,
+            FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: _currentLocation!,
+                initialZoom: 14,
               ),
-              markers: _markers,
-              polylines: _polylines,
-              myLocationEnabled: true,
-              myLocationButtonEnabled: true,
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.ambulance_finder.app',
+                ),
+                MarkerLayer(markers: _markers),
+                PolylineLayer(polylines: _polylines),
+              ],
             )
           else
             const Center(child: CircularProgressIndicator()),
-          
-          // Bottom Card
           Positioned(
             bottom: 16,
             left: 16,
             right: 16,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 15),
-                ],
+            child: Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Patient Info
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.veryLightGreen,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.person, color: AppColors.primaryGreen),
+              elevation: 8,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Patient: ${widget.patientName}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.patientName,
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                            Text(
-                              widget.patientPhone,
-                              style: TextStyle(fontSize: 12, color: AppColors.grey),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            GpsService.formatDistance(_currentDistance),
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryGreen),
-                          ),
-                          Text(
-                            'ETA: ${GpsService.formatDuration(_currentEta)}',
-                            style: const TextStyle(fontSize: 12, color: AppColors.primaryGreen),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 12),
-                  
-                  // Action Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isLoading
-                          ? null
-                          : _currentStatus == 'arrived'
-                              ? _markAsLoaded
-                              : _currentStatus == 'patient_loaded'
-                                  ? _completeTrip
-                                  : _markAsArrived,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryGreen,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : Text(
-                              _currentStatus == 'arrived'
-                                  ? '✅ PATIENT LOADED'
-                                  : _currentStatus == 'patient_loaded'
-                                      ? '🏥 COMPLETE TRIP'
-                                      : '📍 MARK AS ARRIVED',
-                            ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Distance: ${_currentDistance.toStringAsFixed(1)} km',
+                        ),
+                        Text(
+                          'ETA: ${_currentEta.inMinutes > 0 ? '${_currentEta.inMinutes} min' : 'Calculating'}',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Phone: ${widget.patientPhone}',
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _markAsArrived,
+                            child: const Text('Arrived at Patient'),
+                          ),
+                        ),
+                        // Remove Loaded and Complete buttons
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

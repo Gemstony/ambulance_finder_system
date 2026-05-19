@@ -25,8 +25,14 @@ class _IncomingRequestsState extends State<IncomingRequests> {
   }
 
   void _loadRequests() {
-    final requestProvider = Provider.of<RequestProvider>(context, listen: false);
-    requestProvider.listenToPendingRequests();
+    final requestProvider = Provider.of<RequestProvider>(
+      context,
+      listen: false,
+    );
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.currentUser != null) {
+      requestProvider.listenToPendingRequests(authProvider.currentUser!.uid);
+    }
   }
 
   List<dynamic> _getFilteredRequests(List<dynamic> requests) {
@@ -34,28 +40,40 @@ class _IncomingRequestsState extends State<IncomingRequests> {
     return requests.where((req) => req.severity == _filter).toList();
   }
 
-  Future<void> _acceptRequest(String requestId, String patientName, String patientPhone, double lat, double lng) async {
+  Future<void> _acceptRequest(
+    String requestId,
+    String patientName,
+    String patientPhone,
+    double lat,
+    double lng,
+  ) async {
     setState(() => _isLoading = true);
-    
+
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final requestProvider = Provider.of<RequestProvider>(context, listen: false);
+    final requestProvider = Provider.of<RequestProvider>(
+      context,
+      listen: false,
+    );
     final userData = authProvider.currentUserData;
-    
+
     if (userData == null) return;
-    
+
     final success = await requestProvider.acceptRequest(
       requestId,
       userData.uid,
       userData.fullName,
     );
-    
+
     setState(() => _isLoading = false);
-    
+
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Request accepted!'), backgroundColor: Colors.green),
+        const SnackBar(
+          content: Text('Request accepted!'),
+          backgroundColor: Colors.green,
+        ),
       );
-      
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -70,7 +88,12 @@ class _IncomingRequestsState extends State<IncomingRequests> {
       );
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(requestProvider.errorMessage ?? 'Failed to accept request'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(
+            requestProvider.errorMessage ?? 'Failed to accept request',
+          ),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -94,9 +117,15 @@ class _IncomingRequestsState extends State<IncomingRequests> {
             onSelected: (value) => setState(() => _filter = value),
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'all', child: Text('All Requests')),
-              const PopupMenuItem(value: 'critical', child: Text('Critical Only')),
+              const PopupMenuItem(
+                value: 'critical',
+                child: Text('Critical Only'),
+              ),
               const PopupMenuItem(value: 'high', child: Text('High Priority')),
-              const PopupMenuItem(value: 'medium', child: Text('Medium Priority')),
+              const PopupMenuItem(
+                value: 'medium',
+                child: Text('Medium Priority'),
+              ),
               const PopupMenuItem(value: 'low', child: Text('Low Priority')),
             ],
           ),
@@ -113,18 +142,18 @@ class _IncomingRequestsState extends State<IncomingRequests> {
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : pendingRequests.isEmpty
-                ? _buildEmptyState()
-                : RefreshIndicator(
-                    onRefresh: () async => _loadRequests(),
-                    child: ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: filteredRequests.length,
-                      itemBuilder: (context, index) {
-                        final request = filteredRequests[index];
-                        return _buildRequestCard(request);
-                      },
-                    ),
-                  ),
+            ? _buildEmptyState()
+            : RefreshIndicator(
+                onRefresh: () async => _loadRequests(),
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: filteredRequests.length,
+                  itemBuilder: (context, index) {
+                    final request = filteredRequests[index];
+                    return _buildRequestCard(request);
+                  },
+                ),
+              ),
       ),
     );
   }
@@ -161,12 +190,15 @@ class _IncomingRequestsState extends State<IncomingRequests> {
   }
 
   Widget _buildRequestCard(request) {
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    final locationProvider = Provider.of<LocationProvider>(
+      context,
+      listen: false,
+    );
     final currentLocation = locationProvider.currentLocation;
-    
+
     double distance = 0;
     Duration eta = Duration.zero;
-    
+
     if (currentLocation != null) {
       distance = GpsService.calculateDistance(
         currentLocation.latitude,
@@ -176,15 +208,19 @@ class _IncomingRequestsState extends State<IncomingRequests> {
       );
       eta = GpsService.calculateEstimatedTime(distance);
     }
-    
+
     Color severityColor;
     switch (request.severity) {
-      case 'critical': severityColor = Colors.red;
-      case 'high': severityColor = Colors.deepOrange;
-      case 'medium': severityColor = Colors.orange;
-      default: severityColor = Colors.green;
+      case 'critical':
+        severityColor = Colors.red;
+      case 'high':
+        severityColor = Colors.deepOrange;
+      case 'medium':
+        severityColor = Colors.orange;
+      default:
+        severityColor = Colors.green;
     }
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -216,11 +252,15 @@ class _IncomingRequestsState extends State<IncomingRequests> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
-                    request.emergencyType == 'accident' ? Icons.car_crash :
-                    request.emergencyType == 'heart_attack' ? Icons.favorite :
-                    request.emergencyType == 'stroke' ? Icons.psychology :
-                    request.emergencyType == 'pregnancy' ? Icons.child_care :
-                    Icons.medical_services,
+                    request.emergencyType == 'accident'
+                        ? Icons.car_crash
+                        : request.emergencyType == 'heart_attack'
+                        ? Icons.favorite
+                        : request.emergencyType == 'stroke'
+                        ? Icons.psychology
+                        : request.emergencyType == 'pregnancy'
+                        ? Icons.child_care
+                        : Icons.medical_services,
                     color: Colors.white,
                     size: 20,
                   ),
@@ -249,7 +289,10 @@ class _IncomingRequestsState extends State<IncomingRequests> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade200,
                     borderRadius: BorderRadius.circular(12),
@@ -262,7 +305,7 @@ class _IncomingRequestsState extends State<IncomingRequests> {
               ],
             ),
           ),
-          
+
           // Body
           Padding(
             padding: const EdgeInsets.all(16),
@@ -301,15 +344,19 @@ class _IncomingRequestsState extends State<IncomingRequests> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.note, size: 14, color: AppColors.primaryGreen),
+                        Icon(
+                          Icons.note,
+                          size: 14,
+                          color: AppColors.primaryGreen,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(child: Text(request.notes!)),
                       ],
                     ),
                   ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Distance and ETA
                 Row(
                   children: [
@@ -325,10 +372,18 @@ class _IncomingRequestsState extends State<IncomingRequests> {
                             Icon(Icons.straighten, color: Colors.blue),
                             const SizedBox(height: 4),
                             Text(
-                              currentLocation != null ? GpsService.formatDistance(distance) : '--',
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              currentLocation != null
+                                  ? GpsService.formatDistance(distance)
+                                  : '--',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                            const Text('Distance', style: TextStyle(fontSize: 10)),
+                            const Text(
+                              'Distance',
+                              style: TextStyle(fontSize: 10),
+                            ),
                           ],
                         ),
                       ),
@@ -346,8 +401,13 @@ class _IncomingRequestsState extends State<IncomingRequests> {
                             Icon(Icons.timer, color: Colors.orange),
                             const SizedBox(height: 4),
                             Text(
-                              currentLocation != null ? GpsService.formatDuration(eta) : '--',
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              currentLocation != null
+                                  ? GpsService.formatDuration(eta)
+                                  : '--',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             const Text('ETA', style: TextStyle(fontSize: 10)),
                           ],
@@ -356,9 +416,9 @@ class _IncomingRequestsState extends State<IncomingRequests> {
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Status Badge
                 Container(
                   width: double.infinity,
@@ -377,9 +437,9 @@ class _IncomingRequestsState extends State<IncomingRequests> {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Accept Button (only if pending)
                 if (request.status == 'pending')
                   SizedBox(
@@ -404,7 +464,7 @@ class _IncomingRequestsState extends State<IncomingRequests> {
                       ),
                     ),
                   ),
-                
+
                 // For already accepted requests
                 if (request.status != 'pending')
                   SizedBox(
@@ -425,7 +485,9 @@ class _IncomingRequestsState extends State<IncomingRequests> {
                         );
                       },
                       icon: const Icon(Icons.navigation),
-                      label: Text('VIEW TRIP (${_getStatusText(request.status)})'),
+                      label: Text(
+                        'VIEW TRIP (${_getStatusText(request.status)})',
+                      ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.primaryGreen,
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -445,30 +507,44 @@ class _IncomingRequestsState extends State<IncomingRequests> {
 
   String _getSeverityText(String? severity) {
     switch (severity) {
-      case 'critical': return '⚠️ CRITICAL EMERGENCY';
-      case 'high': return '🔴 HIGH PRIORITY';
-      case 'medium': return '🟠 MEDIUM PRIORITY';
-      default: return '🟢 LOW PRIORITY';
+      case 'critical':
+        return '⚠️ CRITICAL EMERGENCY';
+      case 'high':
+        return '🔴 HIGH PRIORITY';
+      case 'medium':
+        return '🟠 MEDIUM PRIORITY';
+      default:
+        return '🟢 LOW PRIORITY';
     }
   }
 
   String _getStatusText(String status) {
     switch (status) {
-      case 'pending': return 'PENDING';
-      case 'accepted': return 'ACCEPTED';
-      case 'enroute': return 'EN ROUTE';
-      case 'arrived': return 'ARRIVED';
-      default: return status.toUpperCase();
+      case 'pending':
+        return 'PENDING';
+      case 'accepted':
+        return 'ACCEPTED';
+      case 'enroute':
+        return 'EN ROUTE';
+      case 'arrived':
+        return 'ARRIVED';
+      default:
+        return status.toUpperCase();
     }
   }
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'pending': return Colors.orange;
-      case 'accepted': return Colors.blue;
-      case 'enroute': return Colors.cyan;
-      case 'arrived': return Colors.green;
-      default: return Colors.grey;
+      case 'pending':
+        return Colors.orange;
+      case 'accepted':
+        return Colors.blue;
+      case 'enroute':
+        return Colors.cyan;
+      case 'arrived':
+        return Colors.green;
+      default:
+        return Colors.grey;
     }
   }
 

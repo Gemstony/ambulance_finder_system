@@ -20,21 +20,21 @@ class AdminDashboard extends StatefulWidget {
 class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = 0;
   final FirestoreService _firestoreService = FirestoreService();
-  
+
   // Real data variables
   int _totalUsers = 0;
   int _activeDrivers = 0;
   int _pendingRequests = 0;
   int _completedTrips = 0;
   bool _isLoadingStats = true;
-  
+
   final List<Widget> _screens = [
     const _DashboardHome(),
     const ManageUsers(),
     const LiveTracking(),
     const ReportsScreen(),
   ];
-  
+
   final List<String> _titles = [
     'Admin Dashboard',
     'Manage Users',
@@ -47,30 +47,32 @@ class _AdminDashboardState extends State<AdminDashboard> {
     super.initState();
     _loadRealTimeStats();
   }
-  
+
   void _loadRealTimeStats() {
     // Listen to users collection for real-time updates
     _firestoreService.getAllUsers().listen((snapshot) {
       if (mounted) {
         setState(() {
           _totalUsers = snapshot.docs.length;
-          _activeDrivers = snapshot.docs.where((doc) => 
-            doc['role'] == 'driver' && doc['isActive'] == true
-          ).length;
+          _activeDrivers = snapshot.docs
+              .where(
+                (doc) => doc['role'] == 'driver' && doc['isActive'] == true,
+              )
+              .length;
         });
       }
     });
-    
+
     // Listen to requests collection for real-time updates
     _firestoreService.getAllRequests().listen((snapshot) {
       if (mounted) {
         setState(() {
-          _pendingRequests = snapshot.docs.where((doc) => 
-            doc['status'] == 'pending'
-          ).length;
-          _completedTrips = snapshot.docs.where((doc) => 
-            doc['status'] == 'completed'
-          ).length;
+          _pendingRequests = snapshot.docs
+              .where((doc) => doc['status'] == 'pending')
+              .length;
+          _completedTrips = snapshot.docs
+              .where((doc) => doc['status'] == 'completed')
+              .length;
           _isLoadingStats = false;
         });
       }
@@ -104,7 +106,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
         unselectedItemColor: AppColors.grey,
         type: BottomNavigationBarType.fixed,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Users'),
           BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Live Map'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'Reports'),
@@ -116,7 +121,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget _buildDrawer(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final userData = authProvider.currentUserData;
-    
+
     return Drawer(
       child: Container(
         color: Colors.white,
@@ -134,9 +139,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     child: Text(
                       userData?.initials ?? 'A',
                       style: const TextStyle(
-                        fontSize: 32, 
-                        fontWeight: FontWeight.bold, 
-                        color: AppColors.primaryGreen
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryGreen,
                       ),
                     ),
                   ),
@@ -144,9 +149,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   Text(
                     userData?.fullName ?? 'Admin',
                     style: const TextStyle(
-                      color: Colors.white, 
-                      fontSize: 18, 
-                      fontWeight: FontWeight.bold
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -232,13 +237,13 @@ class _DashboardHome extends StatefulWidget {
 
 class _DashboardHomeState extends State<_DashboardHome> {
   final FirestoreService _firestoreService = FirestoreService();
-  
+
   int _totalUsers = 0;
   int _activeDrivers = 0;
   int _pendingRequests = 0;
   int _completedTrips = 0;
   bool _isLoading = true;
-  
+
   List<QueryDocumentSnapshot> _recentRequests = [];
 
   @override
@@ -246,37 +251,42 @@ class _DashboardHomeState extends State<_DashboardHome> {
     super.initState();
     _loadDashboardData();
   }
-  
+
   void _loadDashboardData() {
     // Get users data
     _firestoreService.getAllUsers().listen((userSnapshot) {
       if (mounted) {
         setState(() {
           _totalUsers = userSnapshot.docs.length;
-          _activeDrivers = userSnapshot.docs.where((doc) => 
-            doc['role'] == 'driver' && doc['isActive'] == true && doc['isOnline'] == true
-          ).length;
+          _activeDrivers = userSnapshot.docs
+              .where(
+                (doc) =>
+                    doc['role'] == 'driver' &&
+                    doc['isActive'] == true &&
+                    doc['isOnline'] == true,
+              )
+              .length;
         });
       }
     });
-    
+
     // Get requests data
     _firestoreService.getAllRequests().listen((requestSnapshot) {
       if (mounted) {
         setState(() {
-          _pendingRequests = requestSnapshot.docs.where((doc) => 
-            doc['status'] == 'pending'
-          ).length;
-          _completedTrips = requestSnapshot.docs.where((doc) => 
-            doc['status'] == 'completed'
-          ).length;
-          
+          _pendingRequests = requestSnapshot.docs
+              .where((doc) => doc['status'] == 'pending')
+              .length;
+          _completedTrips = requestSnapshot.docs
+              .where((doc) => doc['status'] == 'completed')
+              .length;
+
           // Get recent 5 requests
           _recentRequests = requestSnapshot.docs
               .where((doc) => doc['status'] == 'pending')
               .take(5)
               .toList();
-          
+
           _isLoading = false;
         });
       }
@@ -334,9 +344,9 @@ class _DashboardHomeState extends State<_DashboardHome> {
                       ),
                     ],
                   ),
-                  
+
                   const SizedBox(height: 16),
-                  
+
                   // Quick Actions - Working Buttons
                   const Text(
                     'Quick Actions',
@@ -351,7 +361,12 @@ class _DashboardHomeState extends State<_DashboardHome> {
                           icon: Icons.people,
                           color: Colors.blue,
                           onTap: () {
-                            // This will be handled by parent
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ManageUsers(),
+                              ),
+                            );
                           },
                         ),
                       ),
@@ -361,7 +376,14 @@ class _DashboardHomeState extends State<_DashboardHome> {
                           title: 'Live Tracking',
                           icon: Icons.map,
                           color: AppColors.primaryGreen,
-                          onTap: () {},
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const LiveTracking(),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ],
@@ -374,7 +396,14 @@ class _DashboardHomeState extends State<_DashboardHome> {
                           title: 'View Reports',
                           icon: Icons.receipt,
                           color: Colors.purple,
-                          onTap: () {},
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ReportsScreen(),
+                              ),
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -386,16 +415,18 @@ class _DashboardHomeState extends State<_DashboardHome> {
                           onTap: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => const ProfileScreen(),
+                              ),
                             );
                           },
                         ),
                       ),
                     ],
                   ),
-                  
+
                   const SizedBox(height: 16),
-                  
+
                   // Recent Requests
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -408,7 +439,10 @@ class _DashboardHomeState extends State<_DashboardHome> {
                       children: [
                         const Text(
                           'Recent Emergency Requests',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         if (_recentRequests.isEmpty)
@@ -420,10 +454,13 @@ class _DashboardHomeState extends State<_DashboardHome> {
                           ListView.builder(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _recentRequests.length > 3 ? 3 : _recentRequests.length,
+                            itemCount: _recentRequests.length > 3
+                                ? 3
+                                : _recentRequests.length,
                             itemBuilder: (context, index) {
                               final request = _recentRequests[index];
-                              final data = request.data() as Map<String, dynamic>;
+                              final data =
+                                  request.data() as Map<String, dynamic>;
                               return _buildRecentRequestCard(data);
                             },
                           ),
@@ -527,7 +564,10 @@ class _DashboardHomeState extends State<_DashboardHome> {
               children: [
                 Text(
                   request['patientName'] ?? 'Unknown',
-                  style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                  ),
                 ),
                 Text(
                   _formatTime(request['timestamp']),
