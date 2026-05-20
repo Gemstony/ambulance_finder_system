@@ -232,7 +232,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   String _formatDistance(double km) {
     if (km <= 0) return 'Calculating...';
-    return '${km.toStringAsFixed(1)} km';
+    // TODO: i will fix this distance problem letter, for now i will just show distance in meters
+    return '${km.toStringAsFixed(0)} m';
   }
 
   String _formatEta(double km) {

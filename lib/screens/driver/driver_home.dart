@@ -696,8 +696,9 @@ class _DriverHomeState extends State<DriverHome> {
               title: const Text('Logout', style: TextStyle(color: Colors.red)),
               onTap: () async {
                 await authProvider.logout();
-                if (context.mounted)
+                if (context.mounted) {
                   Navigator.pushReplacementNamed(context, '/login');
+                }
               },
             ),
           ],

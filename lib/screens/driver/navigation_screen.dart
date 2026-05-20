@@ -137,8 +137,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
     final lngDiff = (driver.longitude - patient.longitude).abs();
     final maxSpan = latDiff > lngDiff ? latDiff : lngDiff;
     double zoom = 14;
-    if (maxSpan > 0.2) zoom = 10;
-    else if (maxSpan > 0.1) zoom = 11.5;
+    if (maxSpan > 0.2) {
+      zoom = 10;
+    } else if (maxSpan > 0.1) zoom = 11.5;
     else if (maxSpan > 0.05) zoom = 13;
     _mapController?.move(LatLng(midLat, midLng), zoom);
   }
@@ -174,7 +175,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
     final distanceKm = _currentDistanceMeters / 1000;
     final etaMinutes = _currentEta.inMinutes;
 
-    return Scaffold(
+    return Scaffold( 
       appBar: AppBar(
         title: Text('Navigate to ${widget.patientName}'),
         backgroundColor: AppColors.primaryGreen,
@@ -220,7 +221,8 @@ class _NavigationScreenState extends State<NavigationScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Distance: ${distanceKm.toStringAsFixed(1)} km'),
+                        // TODO: i will fix this distance problem letter, for now i will just show distance in meters
+                        Text('Distance: ${_currentDistanceMeters.toStringAsFixed(0)} m'),
                         Text('ETA: ${etaMinutes > 0 ? "$etaMinutes min" : "Calculating"}'),
                       ],
                     ),

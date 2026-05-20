@@ -15,7 +15,7 @@ class LiveTracking extends StatefulWidget {
 class _LiveTrackingState extends State<LiveTracking> {
   final FirestoreService _firestoreService = FirestoreService();
   String _selectedView = 'ambulances';
-  MapController _mapController = MapController();
+  final MapController _mapController = MapController();
   List<Marker> _markers = [];
 
   int _activeDrivers = 0;
@@ -183,11 +183,13 @@ class _LiveTrackingState extends State<LiveTracking> {
             child: StreamBuilder<QuerySnapshot>(
               stream: _firestoreService.getActiveDrivers(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData)
+                if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
+                }
                 final drivers = snapshot.data!.docs;
-                if (drivers.isEmpty)
+                if (drivers.isEmpty) {
                   return const Center(child: Text('No active drivers'));
+                }
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: drivers.length,

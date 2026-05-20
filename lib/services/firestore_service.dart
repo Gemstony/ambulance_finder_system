@@ -64,12 +64,15 @@ class FirestoreService {
     if (driverId != null) updates['driverId'] = driverId;
     if (driverName != null) updates['driverName'] = driverName;
 
-    if (status == 'accepted')
+    if (status == 'accepted') {
       updates['acceptedAt'] = FieldValue.serverTimestamp();
-    if (status == 'arrived')
+    }
+    if (status == 'arrived') {
       updates['arrivedAt'] = FieldValue.serverTimestamp();
-    if (status == 'completed')
+    }
+    if (status == 'completed') {
       updates['completedAt'] = FieldValue.serverTimestamp();
+    }
 
     await _firestore.collection('requests').doc(requestId).update(updates);
   }

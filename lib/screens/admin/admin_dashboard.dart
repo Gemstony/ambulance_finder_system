@@ -229,7 +229,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
 // Dashboard Home Widget - With Real Data
 class _DashboardHome extends StatefulWidget {
-  const _DashboardHome({super.key});
+  const _DashboardHome();
 
   @override
   State<_DashboardHome> createState() => _DashboardHomeState();
