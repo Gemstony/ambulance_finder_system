@@ -10,6 +10,7 @@ import '../../utils/colors.dart';
 import 'request_ambulance.dart';
 import 'tracking_screen.dart';
 import '../common/profile_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PatientHome extends StatefulWidget {
   const PatientHome({super.key});
@@ -29,23 +30,32 @@ class _PatientHomeState extends State<PatientHome> {
   }
 
   Future<void> _getLocation() async {
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    final locationProvider = Provider.of<LocationProvider>(
+      context,
+      listen: false,
+    );
     await locationProvider.getCurrentLocation();
   }
 
   void _checkActiveRequest() {
-    final requestProvider = Provider.of<RequestProvider>(context, listen: false);
+    final requestProvider = Provider.of<RequestProvider>(
+      context,
+      listen: false,
+    );
     // Check if user has active request
     FirebaseFirestore.instance
         .collection('requests')
-        .where('patientId', isEqualTo: firebase_auth.FirebaseAuth.instance.currentUser?.uid)
+        .where(
+          'patientId',
+          isEqualTo: firebase_auth.FirebaseAuth.instance.currentUser?.uid,
+        )
         .where('status', whereIn: ['pending', 'accepted', 'enroute', 'arrived'])
         .snapshots()
         .listen((snapshot) {
-      setState(() {
-        _hasActiveRequest = snapshot.docs.isNotEmpty;
-      });
-    });
+          setState(() {
+            _hasActiveRequest = snapshot.docs.isNotEmpty;
+          });
+        });
   }
 
   @override
@@ -129,12 +139,16 @@ class _PatientHomeState extends State<PatientHome> {
                           const SizedBox(height: 4),
                           Row(
                             children: [
-                              const Icon(Icons.location_on, size: 14, color: Colors.white70),
+                              const Icon(
+                                Icons.location_on,
+                                size: 14,
+                                color: Colors.white70,
+                              ),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
                                   locationProvider.hasLocation
-                                      ? locationProvider.formattedCurrentLocation
+                                      ? locationProvider.currentAddress
                                       : 'Getting your location...',
                                   style: const TextStyle(
                                     fontSize: 12,
@@ -164,11 +178,14 @@ class _PatientHomeState extends State<PatientHome> {
                   ],
                 ),
               ),
-              
+
               // Active Request Banner
               if (_hasActiveRequest)
                 Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.blue.shade50,
@@ -189,7 +206,10 @@ class _PatientHomeState extends State<PatientHome> {
                             ),
                             Text(
                               'Track your ambulance in real-time',
-                              style: TextStyle(fontSize: 12, color: AppColors.grey),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.grey,
+                              ),
                             ),
                           ],
                         ),
@@ -198,7 +218,9 @@ class _PatientHomeState extends State<PatientHome> {
                         onPressed: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const TrackingScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const TrackingScreen(),
+                            ),
                           );
                         },
                         style: ElevatedButton.styleFrom(
@@ -213,7 +235,7 @@ class _PatientHomeState extends State<PatientHome> {
                     ],
                   ),
                 ),
-              
+
               // Emergency Button - Modern
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -234,12 +256,16 @@ class _PatientHomeState extends State<PatientHome> {
                       if (locationProvider.hasLocation) {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const RequestAmbulance()),
+                          MaterialPageRoute(
+                            builder: (_) => const RequestAmbulance(),
+                          ),
                         );
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Please wait, getting your location...'),
+                            content: Text(
+                              'Please wait, getting your location...',
+                            ),
                             backgroundColor: Colors.orange,
                           ),
                         );
@@ -250,7 +276,7 @@ class _PatientHomeState extends State<PatientHome> {
                   ),
                 ),
               ),
-              
+
               // Features Grid - Modern
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -272,11 +298,15 @@ class _PatientHomeState extends State<PatientHome> {
                         if (_hasActiveRequest) {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const TrackingScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const TrackingScreen(),
+                            ),
                           );
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('No active ambulance request')),
+                            const SnackBar(
+                              content: Text('No active ambulance request'),
+                            ),
                           );
                         }
                       },
@@ -288,9 +318,7 @@ class _PatientHomeState extends State<PatientHome> {
                       color: Colors.orange,
                       gradient: const [Color(0xFFFF9800), Color(0xFFFFB74D)],
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('History feature coming soon')),
-                        );
+                        _showRequestHistoryDialog(context);
                       },
                     ),
                     _buildModernFeatureCard(
@@ -331,7 +359,11 @@ class _PatientHomeState extends State<PatientHome> {
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+          gradient: LinearGradient(
+            colors: gradient,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
@@ -364,10 +396,7 @@ class _PatientHomeState extends State<PatientHome> {
             const SizedBox(height: 4),
             Text(
               subtitle,
-              style: const TextStyle(
-                fontSize: 11,
-                color: Colors.white70,
-              ),
+              style: const TextStyle(fontSize: 11, color: Colors.white70),
             ),
           ],
         ),
@@ -375,7 +404,11 @@ class _PatientHomeState extends State<PatientHome> {
     );
   }
 
-  Widget _buildDrawer(BuildContext context, AuthProvider authProvider, userData) {
+  Widget _buildDrawer(
+    BuildContext context,
+    AuthProvider authProvider,
+    userData,
+  ) {
     return Drawer(
       child: Container(
         color: Colors.white,
@@ -384,9 +417,7 @@ class _PatientHomeState extends State<PatientHome> {
             Container(
               padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
               width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: AppColors.primaryGradient,
-              ),
+              decoration: BoxDecoration(gradient: AppColors.primaryGradient),
               child: Column(
                 children: [
                   CircleAvatar(
@@ -413,10 +444,7 @@ class _PatientHomeState extends State<PatientHome> {
                   const SizedBox(height: 4),
                   Text(
                     userData?.email ?? '',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
                   ),
                 ],
               ),
@@ -516,14 +544,14 @@ class _PatientHomeState extends State<PatientHome> {
                             backgroundColor: data['status'] == 'completed'
                                 ? Colors.green
                                 : data['status'] == 'pending'
-                                    ? Colors.orange
-                                    : Colors.blue,
+                                ? Colors.orange
+                                : Colors.blue,
                             child: Icon(
                               data['status'] == 'completed'
                                   ? Icons.check
                                   : data['status'] == 'pending'
-                                      ? Icons.pending
-                                      : Icons.local_hospital,
+                                  ? Icons.pending
+                                  : Icons.local_hospital,
                               color: Colors.white,
                               size: 18,
                             ),
@@ -535,8 +563,8 @@ class _PatientHomeState extends State<PatientHome> {
                               color: data['status'] == 'completed'
                                   ? Colors.green
                                   : data['status'] == 'pending'
-                                      ? Colors.orange
-                                      : Colors.blue,
+                                  ? Colors.orange
+                                  : Colors.blue,
                             ),
                           ),
                           subtitle: Text(
@@ -615,11 +643,18 @@ class _PatientHomeState extends State<PatientHome> {
             child: const Text('Close'),
           ),
           ElevatedButton.icon(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              // Open email or call
+
+              final Uri phoneUri = Uri(scheme: 'tel', path: '+255682961155');
+
+              if (await canLaunchUrl(phoneUri)) {
+                await launchUrl(phoneUri);
+              } else {
+                debugPrint('Could not launch dialer');
+              }
             },
-            icon: const Icon(Icons.email),
+            icon: const Icon(Icons.phone),
             label: const Text('Contact Support'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryGreen,
@@ -641,14 +676,20 @@ class _PatientHomeState extends State<PatientHome> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: const [
-              Text('🚑 Before Ambulance Arrives:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                '🚑 Before Ambulance Arrives:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               SizedBox(height: 8),
               Text('• Stay calm and assess the situation'),
               Text('• Don\'t move the person if injured'),
               Text('• Apply pressure to bleeding wounds'),
               Text('• Keep the person warm'),
               SizedBox(height: 12),
-              Text('🆘 For Cardiac Emergency:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                '🆘 For Cardiac Emergency:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               SizedBox(height: 8),
               Text('• Call emergency immediately'),
               Text('• Start CPR if trained'),

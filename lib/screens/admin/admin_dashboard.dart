@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/request_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/colors.dart';
 import 'manage_users.dart';
@@ -369,44 +368,12 @@ class _DashboardHomeState extends State<_DashboardHome> {
                             );
                           },
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildActionButton(
-                          title: 'Live Tracking',
-                          icon: Icons.map,
-                          color: AppColors.primaryGreen,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LiveTracking(),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
+                      ),                      
                     ],
                   ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Expanded(
-                        child: _buildActionButton(
-                          title: 'View Reports',
-                          icon: Icons.receipt,
-                          color: Colors.purple,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const ReportsScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 10),
                       Expanded(
                         child: _buildActionButton(
                           title: 'My Profile',

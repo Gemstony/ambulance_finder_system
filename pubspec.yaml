@@ -54,6 +54,7 @@ dev_dependencies:
   geocoding:
   flutter_polyline_points:
   provider:
+  url_launcher: ^6.3.0
 # for messages
   flutter_local_notifications:
 

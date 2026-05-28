@@ -37,7 +37,6 @@ class _TrackingScreenState extends State<TrackingScreen> {
     _getActiveRequest();
   }
 
-
   void _updateMarkers() {
     if (_patientLocation == null) return;
     final markers = <Marker>[
@@ -62,7 +61,6 @@ class _TrackingScreenState extends State<TrackingScreen> {
       _markers = markers;
     });
   }
-
 
   Future<void> _loadPatientLocation() async {
     final locationProvider = Provider.of<LocationProvider>(
@@ -256,6 +254,26 @@ class _TrackingScreenState extends State<TrackingScreen> {
     final eta = _formatEta(distance);
     final distanceText = _formatDistance(distance);
 
+    if (_patientLocation == null && _requestStatus == 'pending') {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Track Ambulance'),
+          backgroundColor: AppColors.primaryGreen,
+        ),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 60, color: Colors.grey),
+              SizedBox(height: 16),
+              Text('No active ambulance request'),
+              SizedBox(height: 8),
+              Text('Please request an ambulance first'),
+            ],
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Track Ambulance'),

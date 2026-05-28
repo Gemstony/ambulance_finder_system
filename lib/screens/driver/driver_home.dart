@@ -8,6 +8,7 @@ import '../../services/firestore_service.dart';
 import '../../utils/colors.dart';
 import 'incoming_requests.dart';
 import '../../screens/common/profile_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 
 class DriverHome extends StatefulWidget {
   const DriverHome({super.key});
@@ -20,8 +21,7 @@ class _DriverHomeState extends State<DriverHome> {
   bool _isOnline = false;
   final FirestoreService _firestoreService = FirestoreService();
   int _totalTrips = 0;
-  final int _pendingCount = 0;
-  bool _initialized = false; // flag to avoid duplicate listeners
+  bool _initialized = false;
 
   @override
   void initState() {
@@ -48,13 +48,11 @@ class _DriverHomeState extends State<DriverHome> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
     if (user != null) {
-      // Get completed trips count
       final tripsSnapshot = await FirebaseFirestore.instance
           .collection('requests')
           .where('driverId', isEqualTo: user.uid)
           .where('status', isEqualTo: 'completed')
           .get();
-
       setState(() {
         _totalTrips = tripsSnapshot.docs.length;
       });
@@ -98,10 +96,106 @@ class _DriverHomeState extends State<DriverHome> {
     );
   }
 
+  // Add this method inside _DriverHomeState
+
+  void _showTripHistoryDialog() {
+    final userId = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text(
+              'Trip History',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const Divider(),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('requests')
+                    .where('driverId', isEqualTo: userId)
+                    .where('status', isEqualTo: 'completed')
+                    .orderBy('timestamp', descending: true)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error: ${snapshot.error}'));
+                  }
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return const Center(
+                      child: Text('No completed trips found'),
+                    );
+                  }
+
+                  final trips = snapshot.data!.docs;
+                  return ListView.builder(
+                    itemCount: trips.length,
+                    itemBuilder: (context, index) {
+                      final trip = trips[index];
+                      final data = trip.data() as Map<String, dynamic>;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.green,
+                            child: const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                          title: Text(
+                            data['patientName'] ?? 'Unknown Patient',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            'Completed: ${_formatDate(data['timestamp'])}',
+                          ),
+                          trailing: const Icon(
+                            Icons.arrow_forward_ios,
+                            size: 16,
+                          ),
+                          onTap: () {
+                            // Optional: show trip details
+                          },
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Add helper _formatDate (copy from patient_home)
+  String _formatDate(dynamic timestamp) {
+    if (timestamp == null) return 'Unknown';
+    if (timestamp is Timestamp) {
+      final date = timestamp.toDate();
+      return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    }
+    return 'Unknown';
+  }
+
   Future<void> _toggleOnlineStatus() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
-
     if (user == null) return;
 
     setState(() => _isOnline = !_isOnline);
@@ -111,21 +205,14 @@ class _DriverHomeState extends State<DriverHome> {
         {'isOnline': _isOnline, 'updatedAt': FieldValue.serverTimestamp()},
       );
 
-      if (_isOnline) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You are now online - Admin can see you!'),
-            backgroundColor: Colors.green,
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _isOnline ? 'You are now online' : 'You are now offline',
           ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You are now offline'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
+          backgroundColor: _isOnline ? Colors.green : Colors.orange,
+        ),
+      );
     } catch (e) {
       setState(() => _isOnline = !_isOnline);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -145,9 +232,7 @@ class _DriverHomeState extends State<DriverHome> {
     final userData = authProvider.currentUserData;
     final pendingRequests = requestProvider.pendingRequests;
 
-    if (authProvider.currentUser != null) {
-      requestProvider.listenToPendingRequests(authProvider.currentUser!.uid);
-    }
+    // Live update for total trips (optional – already in initState, but we can listen)
     if (userData != null) {
       FirebaseFirestore.instance
           .collection('requests')
@@ -155,11 +240,7 @@ class _DriverHomeState extends State<DriverHome> {
           .where('status', isEqualTo: 'completed')
           .snapshots()
           .listen((snapshot) {
-            if (mounted) {
-              setState(() {
-                _totalTrips = snapshot.docs.length;
-              });
-            }
+            if (mounted) setState(() => _totalTrips = snapshot.docs.length);
           });
     }
 
@@ -175,12 +256,10 @@ class _DriverHomeState extends State<DriverHome> {
             children: [
               IconButton(
                 icon: const Icon(Icons.notifications),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const IncomingRequests()),
-                  );
-                },
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const IncomingRequests()),
+                ),
               ),
               if (pendingRequests.isNotEmpty)
                 Positioned(
@@ -275,7 +354,7 @@ class _DriverHomeState extends State<DriverHome> {
               ),
             ),
 
-            // Stats Row - NO RATING
+            // Stats Row
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
@@ -300,7 +379,6 @@ class _DriverHomeState extends State<DriverHome> {
                 ],
               ),
             ),
-
             const SizedBox(height: 16),
 
             // Quick Actions
@@ -313,14 +391,12 @@ class _DriverHomeState extends State<DriverHome> {
                       title: 'View Requests',
                       icon: Icons.list_alt,
                       color: AppColors.primaryGreen,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const IncomingRequests(),
-                          ),
-                        );
-                      },
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const IncomingRequests(),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -329,23 +405,20 @@ class _DriverHomeState extends State<DriverHome> {
                       title: 'My Profile',
                       icon: Icons.person,
                       color: Colors.blue,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const ProfileScreen(),
-                          ),
-                        );
-                      },
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ProfileScreen(),
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-
             const SizedBox(height: 16),
 
-            // Location Status
+            // Location Status (showing address from LocationProvider)
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 12),
               padding: const EdgeInsets.all(12),
@@ -371,7 +444,7 @@ class _DriverHomeState extends State<DriverHome> {
                         ),
                         Text(
                           locationProvider.hasLocation
-                              ? locationProvider.formattedCurrentLocation
+                              ? locationProvider.currentAddress
                               : 'Getting location...',
                           style: const TextStyle(fontSize: 11),
                         ),
@@ -400,7 +473,6 @@ class _DriverHomeState extends State<DriverHome> {
                 ],
               ),
             ),
-
             const SizedBox(height: 16),
 
             // Incoming Requests Section
@@ -414,20 +486,17 @@ class _DriverHomeState extends State<DriverHome> {
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                   ),
                   TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const IncomingRequests(),
-                        ),
-                      );
-                    },
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const IncomingRequests(),
+                      ),
+                    ),
                     child: const Text('View All'),
                   ),
                 ],
               ),
             ),
-
             Expanded(
               child: pendingRequests.isEmpty
                   ? Center(
@@ -573,12 +642,10 @@ class _DriverHomeState extends State<DriverHome> {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const IncomingRequests()),
-              );
-            },
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const IncomingRequests()),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryGreen,
               foregroundColor: Colors.white,
@@ -677,7 +744,10 @@ class _DriverHomeState extends State<DriverHome> {
             ListTile(
               leading: const Icon(Icons.history),
               title: const Text('Trip History'),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(context); // close drawer
+                _showTripHistoryDialog(); // show bottom sheet
+              },
             ),
             ListTile(
               leading: const Icon(Icons.person_outline),

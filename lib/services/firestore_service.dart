@@ -70,8 +70,9 @@ class FirestoreService {
 
     if (status == 'accepted') {
       updates['acceptedAt'] = FieldValue.serverTimestamp();
-      if (status == 'arrived')
+      if (status == 'arrived') {
         updates['arrivedAt'] = FieldValue.serverTimestamp();
+      }
     }
     if (status == 'completed') {
       updates['completedAt'] = FieldValue.serverTimestamp();
@@ -401,7 +402,7 @@ class FirestoreService {
 
       if (querySnapshot.docs.isNotEmpty) {
         final doc = querySnapshot.docs.first;
-        return RequestModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
+        return RequestModel.fromMap(doc.id, doc.data());
       }
       return null;
     } catch (e) {
@@ -425,7 +426,7 @@ class FirestoreService {
 
       if (querySnapshot.docs.isNotEmpty) {
         final doc = querySnapshot.docs.first;
-        return RequestModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
+        return RequestModel.fromMap(doc.id, doc.data());
       }
       return null;
     } catch (e) {
