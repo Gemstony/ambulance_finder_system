@@ -57,6 +57,7 @@ class FirestoreService {
   }
 
   // Update request status
+  // In firestore_service.dart
   Future<void> updateRequestStatus(
     String requestId,
     String status, {
@@ -68,17 +69,18 @@ class FirestoreService {
     if (driverId != null) updates['driverId'] = driverId;
     if (driverName != null) updates['driverName'] = driverName;
 
+    // Add timestamps based on status
     if (status == 'accepted') {
       updates['acceptedAt'] = FieldValue.serverTimestamp();
-      if (status == 'arrived') {
-        updates['arrivedAt'] = FieldValue.serverTimestamp();
-      }
-    }
-    if (status == 'completed') {
+    } else if (status == 'arrived') {
+      updates['arrivedAt'] = FieldValue.serverTimestamp();
+    } else if (status == 'completed') {
       updates['completedAt'] = FieldValue.serverTimestamp();
-
-      await _firestore.collection('requests').doc(requestId).update(updates);
     }
+    // For 'cancelled', no extra timestamp (or you could add cancelledAt)
+
+    // 🔥 IMPORTANT: Always perform the update
+    await _firestore.collection('requests').doc(requestId).update(updates);
   }
 
   // Get request by ID

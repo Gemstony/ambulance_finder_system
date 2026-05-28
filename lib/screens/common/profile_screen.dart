@@ -16,17 +16,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isEditing = false;
   bool _isLoading = false;
   final bool _showPasswordDialog = false;
-  
+
   late TextEditingController _fullNameController;
   late TextEditingController _phoneController;
   late TextEditingController _emergencyContactController;
   late TextEditingController _emergencyPhoneController;
-  
+
   // Password change controllers
-  final TextEditingController _currentPasswordController = TextEditingController();
+  final TextEditingController _currentPasswordController =
+      TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
-  
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+
   Map<String, dynamic>? _userData;
   String? _userId;
   String? _userEmail;
@@ -36,7 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     _loadUserData();
   }
-  
+
   Future<void> _loadUserData() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final user = authProvider.currentUser;
@@ -50,35 +52,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (doc.exists) {
         setState(() {
           _userData = doc.data();
-          _fullNameController = TextEditingController(text: _userData?['fullName'] ?? '');
-          _phoneController = TextEditingController(text: _userData?['phone'] ?? '');
-          _emergencyContactController = TextEditingController(text: _userData?['emergencyContact'] ?? '');
-          _emergencyPhoneController = TextEditingController(text: _userData?['emergencyContactPhone'] ?? '');
+          _fullNameController = TextEditingController(
+            text: _userData?['fullName'] ?? '',
+          );
+          _phoneController = TextEditingController(
+            text: _userData?['phone'] ?? '',
+          );
+          _emergencyContactController = TextEditingController(
+            text: _userData?['emergencyContact'] ?? '',
+          );
+          _emergencyPhoneController = TextEditingController(
+            text: _userData?['emergencyContactPhone'] ?? '',
+          );
         });
       }
     }
   }
-  
+
   Future<void> _saveProfile() async {
     setState(() => _isLoading = true);
-    
+
     try {
       final updates = {
         'fullName': _fullNameController.text.trim(),
         'phone': _phoneController.text.trim(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
-      
+
       if (_userData?['role'] == 'patient') {
         updates['emergencyContact'] = _emergencyContactController.text.trim();
-        updates['emergencyContactPhone'] = _emergencyPhoneController.text.trim();
+        updates['emergencyContactPhone'] = _emergencyPhoneController.text
+            .trim();
       }
-      
+
       await FirebaseFirestore.instance
           .collection('users')
           .doc(_userId)
           .update(updates);
-      
+
       setState(() {
         _isEditing = false;
         _isLoading = false;
@@ -87,18 +98,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _userData!['phone'] = _phoneController.text.trim();
         }
       });
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green),
+        const SnackBar(
+          content: Text('Profile updated successfully!'),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Failed to update: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
-  
+
   // ============================================================
   // PASSWORD CHANGE FUNCTIONALITY
   // ============================================================
@@ -106,7 +123,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _currentPasswordController.clear();
     _newPasswordController.clear();
     _confirmPasswordController.clear();
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -173,51 +190,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   // Validation
                   if (_currentPasswordController.text.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please enter current password'), backgroundColor: Colors.red),
+                      const SnackBar(
+                        content: Text('Please enter current password'),
+                        backgroundColor: Colors.red,
+                      ),
                     );
                     return;
                   }
                   if (_newPasswordController.text.length < 6) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('New password must be at least 6 characters'), backgroundColor: Colors.red),
+                      const SnackBar(
+                        content: Text(
+                          'New password must be at least 6 characters',
+                        ),
+                        backgroundColor: Colors.red,
+                      ),
                     );
                     return;
                   }
-                  if (_newPasswordController.text != _confirmPasswordController.text) {
+                  if (_newPasswordController.text !=
+                      _confirmPasswordController.text) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('New passwords do not match'), backgroundColor: Colors.red),
+                      const SnackBar(
+                        content: Text('New passwords do not match'),
+                        backgroundColor: Colors.red,
+                      ),
                     );
                     return;
                   }
-                  
+
                   setStateDialog(() => _isLoading = true);
-                  
+
                   try {
                     final auth = FirebaseAuth.instance;
                     final user = auth.currentUser;
-                    
+
                     if (user != null && user.email != null) {
                       // Re-authenticate user with current password
                       final credential = EmailAuthProvider.credential(
                         email: user.email!,
                         password: _currentPasswordController.text,
                       );
-                      
+
                       await user.reauthenticateWithCredential(credential);
-                      
+
                       // Change password
                       await user.updatePassword(_newPasswordController.text);
-                      
+
                       setStateDialog(() => _isLoading = false);
                       Navigator.pop(context);
-                      
+
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Password changed successfully! Please login again.'),
+                          content: Text(
+                            'Password changed successfully! Please login again.',
+                          ),
                           backgroundColor: Colors.green,
                         ),
                       );
-                      
+
                       // Logout user after password change
                       await FirebaseAuth.instance.signOut();
                       if (context.mounted) {
@@ -233,12 +264,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       errorMessage = 'New password is too weak';
                     }
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+                      SnackBar(
+                        content: Text(errorMessage),
+                        backgroundColor: Colors.red,
+                      ),
                     );
                   } catch (e) {
                     setStateDialog(() => _isLoading = false);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                      SnackBar(
+                        content: Text('Error: $e'),
+                        backgroundColor: Colors.red,
+                      ),
                     );
                   }
                 },
@@ -250,7 +287,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Text('Change Password'),
               ),
@@ -265,15 +305,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     if (_userData == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Profile'), backgroundColor: AppColors.primaryGreen),
+        appBar: AppBar(
+          title: const Text('Profile'),
+          backgroundColor: AppColors.primaryGreen,
+        ),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
-    
+
     final role = _userData?['role'] ?? 'patient';
     final isPatient = role == 'patient';
     final isDriver = role == 'driver';
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Profile'),
@@ -293,7 +336,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : const Text('Save', style: TextStyle(color: Colors.white)),
             ),
@@ -321,7 +367,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     bottomRight: Radius.circular(30),
                   ),
                   boxShadow: [
-                    BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10),
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      blurRadius: 10,
+                    ),
                   ],
                 ),
                 child: Column(
@@ -330,29 +379,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.primaryGreen, width: 3),
+                        border: Border.all(
+                          color: AppColors.primaryGreen,
+                          width: 3,
+                        ),
                       ),
                       child: CircleAvatar(
                         radius: 50,
                         backgroundColor: AppColors.veryLightGreen,
                         child: Text(
-                          _userData?['fullName']?.substring(0, 1).toUpperCase() ?? 'U',
-                          style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primaryGreen),
+                          _userData?['fullName']
+                                  ?.substring(0, 1)
+                                  .toUpperCase() ??
+                              'U',
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryGreen,
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 12),
                     Text(
                       _userData?['fullName'] ?? 'User',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: role == 'admin' ? Colors.red.shade50 : 
-                               role == 'driver' ? Colors.blue.shade50 : 
-                               AppColors.veryLightGreen,
+                        color: role == 'admin'
+                            ? Colors.red.shade50
+                            : role == 'driver'
+                            ? Colors.blue.shade50
+                            : AppColors.veryLightGreen,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -360,18 +427,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: role == 'admin' ? Colors.red : 
-                                 role == 'driver' ? Colors.blue : 
-                                 AppColors.primaryGreen,
+                          color: role == 'admin'
+                              ? Colors.red
+                              : role == 'driver'
+                              ? Colors.blue
+                              : AppColors.primaryGreen,
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              
+
               const SizedBox(height: 20),
-              
+
               // Profile Info
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -401,7 +470,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       controller: _phoneController,
                       keyboardType: TextInputType.phone,
                     ),
-                    
+
                     if (isPatient) ...[
                       const SizedBox(height: 12),
                       _buildInfoField(
@@ -421,9 +490,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         keyboardType: TextInputType.phone,
                       ),
                     ],
-                    
+
                     const SizedBox(height: 20),
-                    
+
                     // Change Password Button
                     SizedBox(
                       width: double.infinity,
@@ -442,38 +511,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     ),
-                    
+
                     const SizedBox(height: 16),
-                    
-                    // Driver Stats - NO RATING
-                    if (isDriver) ...[
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          children: [
-                            const Text(
-                              'Driver Statistics',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildStatItem('Total Trips', _userData?['totalTrips']?.toString() ?? '0', Icons.airport_shuttle),
-                                ),
-                                Expanded(
-                                  child: _buildStatItem('Response Time', _userData?['avgResponseTime']?.toString() ?? 'N/A', Icons.timer),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -483,7 +522,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-  
+
   Widget _buildInfoField({
     required String label,
     required String value,
@@ -517,7 +556,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: TextStyle(fontSize: 10, color: AppColors.grey)),
+                Text(
+                  label,
+                  style: TextStyle(fontSize: 10, color: AppColors.grey),
+                ),
                 const SizedBox(height: 2),
                 isEditing
                     ? TextFormField(
@@ -532,7 +574,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       )
                     : Text(
                         value,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
               ],
             ),
@@ -541,13 +586,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-  
+
   Widget _buildStatItem(String title, String value, IconData icon) {
     return Column(
       children: [
         Icon(icon, color: AppColors.primaryGreen, size: 24),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
         Text(title, style: const TextStyle(fontSize: 10, color: Colors.grey)),
       ],
     );

@@ -105,12 +105,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 40),
                 // Welcome Text
-                Text(
-                  'Welcome Back!',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primaryGreen,
+                Center(
+                  child: Text(
+                    'Welcome, to Ambulance Finder App!',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryGreen,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),

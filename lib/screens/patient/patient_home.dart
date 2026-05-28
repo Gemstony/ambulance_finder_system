@@ -22,11 +22,60 @@ class PatientHome extends StatefulWidget {
 class _PatientHomeState extends State<PatientHome> {
   bool _hasActiveRequest = false;
 
+  // patient_home.dart – add inside _PatientHomeState
+
+  String _currentRequestStatus = '';
+  String _currentDriverName = '';
+  String _currentDriverPhone = '';
+
   @override
   void initState() {
     super.initState();
     _getLocation();
     _checkActiveRequest();
+    _listenToUserRequests();
+  }
+
+  void _listenToUserRequests() {
+    final userId = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
+
+    final requestProvider = Provider.of<RequestProvider>(
+      context,
+      listen: false,
+    );
+    requestProvider.listenToUserRequests(userId, 'patient');
+    requestProvider.addListener(_onRequestChanged);
+  }
+
+  void _onRequestChanged() {
+    final requestProvider = Provider.of<RequestProvider>(
+      context,
+      listen: false,
+    );
+    final active = requestProvider.activeRequest;
+
+    setState(() {
+      if (active != null) {
+        _currentRequestStatus = active.status;
+        _currentDriverName = active.driverName ?? '';
+        _currentDriverPhone = active.driverPhone ?? '';
+      } else {
+        _currentRequestStatus = '';
+        _currentDriverName = '';
+        _currentDriverPhone = '';
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    final requestProvider = Provider.of<RequestProvider>(
+      context,
+      listen: false,
+    );
+    requestProvider.removeListener(_onRequestChanged);
+    super.dispose();
   }
 
   Future<void> _getLocation() async {
@@ -56,6 +105,51 @@ class _PatientHomeState extends State<PatientHome> {
             _hasActiveRequest = snapshot.docs.isNotEmpty;
           });
         });
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'pending':
+        return Colors.orange;
+      case 'accepted':
+        return Colors.blue;
+      case 'enroute':
+        return Colors.cyan;
+      case 'arrived':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'pending':
+        return Icons.pending;
+      case 'accepted':
+        return Icons.check_circle;
+      case 'enroute':
+        return Icons.directions_car;
+      case 'arrived':
+        return Icons.location_on;
+      default:
+        return Icons.info;
+    }
+  }
+
+  String _getStatusMessage(String status, String driverName) {
+    switch (status) {
+      case 'pending':
+        return '🕒 Your request is pending. Waiting for a driver...';
+      case 'accepted':
+        return '✅ Request accepted! Driver $_currentDriverName is on the way.';
+      case 'enroute':
+        return '🚑 Ambulance is en route to your location.';
+      case 'arrived':
+        return '📍 Ambulance has arrived. Please board.';
+      default:
+        return 'Active request status: $status';
+    }
   }
 
   @override
@@ -180,7 +274,10 @@ class _PatientHomeState extends State<PatientHome> {
               ),
 
               // Active Request Banner
-              if (_hasActiveRequest)
+              // After the welcome card, before the emergency button
+
+              // Status Card – shows current request info
+              if (_currentRequestStatus.isNotEmpty)
                 Container(
                   margin: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -188,32 +285,52 @@ class _PatientHomeState extends State<PatientHome> {
                   ),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue.shade200),
+                    color: _getStatusColor(_currentRequestStatus),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                      ),
+                    ],
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.track_changes, color: Colors.blue),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'You have an active request!',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            Text(
-                              'Track your ambulance in real-time',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.grey,
+                      Row(
+                        children: [
+                          Icon(
+                            _getStatusIcon(_currentRequestStatus),
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _getStatusMessage(
+                                _currentRequestStatus,
+                                _currentDriverName,
+                              ),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
+                      if (_currentRequestStatus == 'accepted' &&
+                          _currentDriverName.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Driver: $_currentDriverName  |  Phone: $_currentDriverPhone',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 8),
                       ElevatedButton(
                         onPressed: () {
                           Navigator.push(
@@ -224,13 +341,15 @@ class _PatientHomeState extends State<PatientHome> {
                           );
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
+                          backgroundColor: Colors.white,
+                          foregroundColor: _getStatusColor(
+                            _currentRequestStatus,
+                          ),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: const Text('Track'),
+                        child: const Text('Track Ambulance'),
                       ),
                     ],
                   ),
@@ -570,7 +689,8 @@ class _PatientHomeState extends State<PatientHome> {
                           subtitle: Text(
                             'Requested: ${_formatDate(data['timestamp'])}',
                           ),
-                          trailing: data['status'] == 'completed'
+                          trailing: data['status'] == 'completed' ||
+                              data['status'] == 'cancelled'
                               ? null
                               : TextButton(
                                   onPressed: () {
