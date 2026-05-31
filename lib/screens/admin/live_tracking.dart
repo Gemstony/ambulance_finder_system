@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/colors.dart';
+import '../../models/request_model.dart';
+import '../../models/user_model.dart';
 
 class LiveTracking extends StatefulWidget {
   const LiveTracking({super.key});
@@ -14,312 +15,531 @@ class LiveTracking extends StatefulWidget {
 
 class _LiveTrackingState extends State<LiveTracking> {
   final FirestoreService _firestoreService = FirestoreService();
-  String _selectedView = 'ambulances';
-  final MapController _mapController = MapController();
-  List<Marker> _markers = [];
+  int _selectedTab = 0; // 0=Drivers, 1=Pending, 2=Rejected, 3=All
 
-  int _activeDrivers = 0;
-  int _activeRequests = 0;
-  int _availableAmbulances = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _listenToLocations();
-    _fetchStats();
-  }
-
-  void _listenToLocations() {
-    // Fetch drivers/ambulances and update markers
-    FirebaseFirestore.instance
-        .collection('drivers_location')
-        .snapshots()
-        .listen((snapshot) {
-          final markers = <Marker>[];
-          for (var doc in snapshot.docs) {
-            final data = doc.data();
-            final geo = data['location'] as GeoPoint?;
-            if (geo != null) {
-              markers.add(
-                Marker(
-                  point: LatLng(geo.latitude, geo.longitude),
-                  width: 40,
-                  height: 40,
-                  child: const Icon(Icons.directions_car, color: Colors.blue),
-                ),
-              );
-            }
-          }
-          setState(() => _markers = markers);
-        });
-  }
-
-  Future<void> _fetchStats() async {
-    // Implement count queries
-    setState(() {
-      _activeDrivers = 3; // placeholder, replace with actual Firestore count
-      _activeRequests = 2;
-      _availableAmbulances = 4;
-    });
+  Future<List<DocumentSnapshot>> _getPendingRequestsWithRejections() async {
+    final pendingSnapshot = await FirebaseFirestore.instance
+        .collection('requests')
+        .where('status', isEqualTo: 'pending')
+        .orderBy('timestamp', descending: true)
+        .get();
+    List<DocumentSnapshot> result = [];
+    for (var doc in pendingSnapshot.docs) {
+      if (await _firestoreService.hasRejections(doc.id)) {
+        result.add(doc);
+      }
+    }
+    return result;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppColors.veryLightGreen, AppColors.white],
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Admin Control Panel'),
+        backgroundColor: AppColors.primaryGreen,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: Column(
+        children: [
+          // Tab selector
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                _buildTab('Drivers', 0),
+                const SizedBox(width: 8),
+                _buildTab('Pending', 1),
+                const SizedBox(width: 8),
+                _buildTab('Rejected', 2),
+                const SizedBox(width: 8),
+                _buildTab('All Requests', 3),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: IndexedStack(
+              index: _selectedTab,
+              children: [
+                _buildDriversTab(),
+                _buildPendingRequestsTab(),
+                _buildRejectedRequestsTab(),
+                _buildAllRequestsTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTab(String label, int index) {
+    final isSelected = _selectedTab == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedTab = index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primaryGreen : Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.black87,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
         ),
       ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildViewButton(
-                    'Ambulances',
-                    'ambulances',
-                    Icons.airport_shuttle,
-                  ),
+    );
+  }
+
+  // ==================== DRIVERS TAB ====================
+  Widget _buildDriversTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestoreService.getAllDriversWithStatus(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final drivers = snapshot.data!.docs;
+        if (drivers.isEmpty) {
+          return const Center(child: Text('No drivers found'));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: drivers.length,
+          itemBuilder: (context, index) {
+            final data = drivers[index].data() as Map<String, dynamic>;
+            final driverId = drivers[index].id;
+            final isOnline = data['isOnline'] == true;
+            final isActive = data['isActive'] == true;
+            final name = data['fullName'] ?? 'Driver';
+            final phone = data['phone'] ?? 'No phone';
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: isOnline ? Colors.green : Colors.grey,
+                  child: Icon(Icons.person, color: Colors.white),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildViewButton('Drivers', 'drivers', Icons.person),
+                title: Text(name),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Phone: $phone'),
+                    Text('Status: ${isOnline ? "Online" : "Offline"}'),
+                    if (!isActive)
+                      Text(
+                        '⚠️ Deactivated',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(child: _buildViewButton('All', 'all', Icons.map)),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildStatItem(
-                    'Active Drivers',
-                    _activeDrivers.toString(),
-                    Icons.airport_shuttle,
-                    Colors.blue,
-                  ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        isOnline ? Icons.wifi : Icons.wifi_off,
+                        color: isOnline ? Colors.green : Colors.red,
+                      ),
+                      onPressed: () async {
+                        // Toggle online status (admin override)
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(driverId)
+                            .update({
+                              'isOnline': !isOnline,
+                              'updatedAt': FieldValue.serverTimestamp(),
+                            });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '${isOnline ? "Offlined" : "Onlined"} $name',
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        isActive ? Icons.block : Icons.check_circle,
+                        color: isActive ? Colors.red : Colors.green,
+                      ),
+                      onPressed: () async {
+                        await _firestoreService.updateUserStatus(
+                          driverId,
+                          !isActive,
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '${isActive ? "Deactivated" : "Activated"} $name',
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatItem(
-                    'Active Requests',
-                    _activeRequests.toString(),
-                    Icons.emergency,
-                    Colors.red,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatItem(
-                    'Available',
-                    _availableAmbulances.toString(),
-                    Icons.check_circle,
-                    Colors.green,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: Container(
-              margin: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.primaryGreen, width: 2),
               ),
-              child: FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  initialCenter: LatLng(-6.7924, 39.2083),
-                  initialZoom: 12,
-                ), // Dar es Salaam center
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ==================== PENDING REQUESTS TAB ====================
+  Widget _buildPendingRequestsTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestoreService.getPendingRequests(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final requests = snapshot.data!.docs;
+        if (requests.isEmpty) {
+          return const Center(child: Text('No pending requests'));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: requests.length,
+          itemBuilder: (context, index) {
+            final doc = requests[index];
+            final data = doc.data() as Map<String, dynamic>;
+            final requestId = doc.id;
+            final patientName = data['patientName'] ?? 'Unknown';
+            final patientPhone = data['patientPhone'] ?? '';
+            final timestamp =
+                (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now();
+            final location = data['patientLocation'] as Map?;
+            final lat = location?['latitude'] ?? 0.0;
+            final lng = location?['longitude'] ?? 0.0;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ExpansionTile(
+                leading: const Icon(Icons.emergency, color: Colors.orange),
+                title: Text(patientName),
+                subtitle: Text('Requested: ${_formatDate(timestamp)}'),
                 children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.ambulance_finder.app',
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Phone: $patientPhone'),
+                        Text('Location: $lat, $lng'),
+                        const Divider(),
+                        // Admin can assign driver manually
+                        Text('Assign to driver:'),
+                        const SizedBox(height: 8),
+                        AssignDriverDropdown(requestId: requestId),
+                      ],
+                    ),
                   ),
-                  MarkerLayer(markers: _markers),
                 ],
               ),
-            ),
-          ),
-          _buildActiveResourcesList(),
-        ],
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildActiveResourcesList() {
-    return Container(
-      height: 200,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Active Resources',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                TextButton(onPressed: () {}, child: const Text('View All')),
-              ],
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _firestoreService.getActiveDrivers(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final drivers = snapshot.data!.docs;
-                if (drivers.isEmpty) {
-                  return const Center(child: Text('No active drivers'));
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: drivers.length,
-                  itemBuilder: (context, index) {
-                    final driver = drivers[index];
-                    final data = driver.data() as Map<String, dynamic>;
-                    return _buildResourceItem(
-                      name: data['fullName'] ?? 'Driver',
-                      status: data['isOnline'] == true ? 'Online' : 'Offline',
-                      location: 'Moving',
-                      statusColor: data['isOnline'] == true
-                          ? Colors.green
-                          : Colors.grey,
-                    );
-                  },
+  // Dropdown to assign a driver to a request
+  Widget _buildAssignDriverDropdown(String requestId) {
+    return FutureBuilder<List<QueryDocumentSnapshot>>(
+      future: _firestoreService.getAvailableDrivers(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const CircularProgressIndicator();
+        }
+        final drivers = snapshot.data!;
+        if (drivers.isEmpty) {
+          return const Text('No available drivers');
+        }
+        String? selectedDriverId;
+        String? selectedDriverName;
+        return Column(
+          children: [
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              hint: const Text('Select driver'),
+              items: drivers.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                return DropdownMenuItem(
+                  value: doc.id,
+                  child: Text(data['fullName'] ?? 'Driver'),
                 );
+              }).toList(),
+              onChanged: (value) {
+                selectedDriverId = value;
+                final doc = drivers.firstWhere((d) => d.id == value);
+                selectedDriverName =
+                    (doc.data() as Map<String, dynamic>)['fullName'] ??
+                    'Driver';
               },
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildViewButton(String label, String viewKey, IconData icon) {
-    final isSelected = _selectedView == viewKey;
-    return ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: isSelected ? AppColors.primaryGreen : Colors.white,
-        foregroundColor: isSelected ? Colors.white : AppColors.primaryGreen,
-        side: BorderSide(color: AppColors.primaryGreen),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        padding: const EdgeInsets.symmetric(vertical: 16),
-      ),
-      onPressed: () {
-        setState(() {
-          _selectedView = viewKey;
-        });
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: selectedDriverId == null
+                  ? null
+                  : () async {
+                      await _firestoreService.reassignRequest(
+                        requestId,
+                        selectedDriverId!,
+                        selectedDriverName!,
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Request assigned to driver'),
+                        ),
+                      );
+                    },
+              child: const Text('Assign Now'),
+            ),
+          ],
+        );
       },
-      icon: Icon(icon),
-      label: Text(label),
     );
   }
 
-  Widget _buildStatItem(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: color.withOpacity(0.15),
-            child: Icon(icon, color: color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontSize: 12, color: Colors.black54),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+  // ==================== REJECTED REQUESTS TAB ====================
+  Widget _buildRejectedRequestsTab() {
+    return FutureBuilder<List<DocumentSnapshot>>(
+      future: _getPendingRequestsWithRejections(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text('No rejected requests'));
+        }
+        final rejectedRequests = snapshot.data!;
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: rejectedRequests.length,
+          itemBuilder: (context, index) {
+            final doc = rejectedRequests[index];
+            final data = doc.data() as Map<String, dynamic>;
+            final requestId = doc.id;
+            final patientName = data['patientName'] ?? 'Unknown';
+            final patientPhone = data['patientPhone'] ?? '';
+            final timestamp =
+                (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now();
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ExpansionTile(
+                leading: const Icon(Icons.report_problem, color: Colors.red),
+                title: Text(patientName),
+                subtitle: Text('Rejected • ${_formatDate(timestamp)}'),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Phone: $patientPhone'),
+                        const Divider(),
+                        Text('Rejected drivers:'),
+                        FutureBuilder<List<String>>(
+                          future: _firestoreService.getRejectedDriverIds(
+                            requestId,
+                          ),
+                          builder: (ctx, rejectedIds) {
+                            if (!rejectedIds.hasData)
+                              return const Text('Loading...');
+                            return Column(
+                              children: rejectedIds.data!
+                                  .map((id) => Text('• Driver ID: $id'))
+                                  .toList(),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        Text('Reassign to a new driver:'),
+                        AssignDriverDropdown(requestId: requestId),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<List<DocumentSnapshot>> _filterRequestsWithRejections(
+    List<QueryDocumentSnapshot> allPending,
+  ) async {
+    List<DocumentSnapshot> result = [];
+    for (var doc in allPending) {
+      if (await _firestoreService.hasRejections(doc.id)) {
+        result.add(doc);
+      }
+    }
+    return result;
+  }
+
+  // ==================== ALL REQUESTS TAB ====================
+  Widget _buildAllRequestsTab() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestoreService.getAllRequests(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final requests = snapshot.data!.docs;
+        if (requests.isEmpty) {
+          return const Center(child: Text('No requests found'));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: requests.length,
+          itemBuilder: (context, index) {
+            final doc = requests[index];
+            final data = doc.data() as Map<String, dynamic>;
+            final status = data['status'] ?? 'unknown';
+            final patientName = data['patientName'] ?? 'Unknown';
+            final timestamp =
+                (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now();
+            final driverName = data['driverName'] ?? 'Not assigned';
+            return Card(
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: _getStatusColor(status),
+                  child: Text(
+                    status[0].toUpperCase(),
+                    style: const TextStyle(color: Colors.white),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ],
-      ),
+                title: Text(patientName),
+                subtitle: Text(
+                  'Status: $status\nDriver: $driverName\nRequested: ${_formatDate(timestamp)}',
+                ),
+                isThreeLine: true,
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildResourceItem({
-    required String name,
-    required String status,
-    required String location,
-    required Color statusColor,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: statusColor.withOpacity(0.2),
-            child: Icon(Icons.local_hospital, color: statusColor),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 4),
-                Text(
-                  '$status • $location',
-                  style: const TextStyle(color: Colors.black54, fontSize: 12),
-                ),
-              ],
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'pending':
+        return Colors.orange;
+      case 'accepted':
+        return Colors.blue;
+      case 'enroute':
+        return Colors.cyan;
+      case 'arrived':
+        return Colors.green;
+      case 'completed':
+        return Colors.grey;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class AssignDriverDropdown extends StatefulWidget {
+  final String requestId;
+  const AssignDriverDropdown({super.key, required this.requestId});
+
+  @override
+  State<AssignDriverDropdown> createState() => _AssignDriverDropdownState();
+}
+
+class _AssignDriverDropdownState extends State<AssignDriverDropdown> {
+  final FirestoreService _firestoreService = FirestoreService();
+  String? _selectedDriverId;
+  String? _selectedDriverName;
+  bool _isAssigning = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<QueryDocumentSnapshot>>(
+      future: _firestoreService.getAvailableDrivers(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const CircularProgressIndicator();
+        }
+        final drivers = snapshot.data!;
+        if (drivers.isEmpty) {
+          return const Text('No available drivers');
+        }
+        return Column(
+          children: [
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              hint: const Text('Select driver'),
+              value: _selectedDriverId,
+              items: drivers.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                return DropdownMenuItem(
+                  value: doc.id,
+                  child: Text(data['fullName'] ?? 'Driver'),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  _selectedDriverId = value;
+                  final doc = drivers.firstWhere((d) => d.id == value);
+                  _selectedDriverName =
+                      (doc.data() as Map<String, dynamic>)['fullName'] ??
+                      'Driver';
+                });
+              },
             ),
-          ),
-          Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey.shade600),
-        ],
-      ),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: (_selectedDriverId == null || _isAssigning)
+                  ? null
+                  : () async {
+                      setState(() => _isAssigning = true);
+                      await _firestoreService.reassignRequest(
+                        widget.requestId,
+                        _selectedDriverId!,
+                        _selectedDriverName!,
+                      );
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Request assigned to driver'),
+                          ),
+                        );
+                        setState(() => _isAssigning = false);
+                      }
+                    },
+              child: _isAssigning
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Assign Now'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

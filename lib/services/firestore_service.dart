@@ -394,23 +394,19 @@ class FirestoreService {
 
   // Get driver's current request (active trip)
   Future<RequestModel?> getDriverActiveRequest(String driverId) async {
-    try {
-      final querySnapshot = await _firestore
-          .collection('requests')
-          .where('driverId', isEqualTo: driverId)
-          .where('status', whereIn: ['accepted', 'enroute', 'arrived'])
-          .limit(1)
-          .get();
-
-      if (querySnapshot.docs.isNotEmpty) {
-        final doc = querySnapshot.docs.first;
-        return RequestModel.fromMap(doc.id, doc.data());
-      }
-      return null;
-    } catch (e) {
-      print('Error getting driver active request: $e');
-      return null;
+    final snapshot = await _firestore
+        .collection('requests')
+        .where('driverId', isEqualTo: driverId)
+        .where('status', whereIn: ['accepted', 'enroute', 'arrived'])
+        .limit(1)
+        .get();
+    if (snapshot.docs.isNotEmpty) {
+      return RequestModel.fromMap(
+        snapshot.docs.first.id,
+        snapshot.docs.first.data(),
+      );
     }
+    return null;
   }
 
   // Get patient's current active request
@@ -435,5 +431,94 @@ class FirestoreService {
       print('Error getting patient active request: $e');
       return null;
     }
+  }
+
+  // Add these methods inside FirestoreService class
+
+  // Get available drivers (online, active, and not on a trip)
+  Future<List<QueryDocumentSnapshot>> getAvailableDrivers() async {
+    // First get all online drivers
+    final driversSnapshot = await _firestore
+        .collection('users')
+        .where('role', isEqualTo: 'driver')
+        .where('isOnline', isEqualTo: true)
+        .where('isActive', isEqualTo: true)
+        .get();
+
+    // Filter out drivers who are already on a trip
+    List<QueryDocumentSnapshot> available = [];
+    for (var doc in driversSnapshot.docs) {
+      final driverId = doc.id;
+      final activeRequest = await getDriverActiveRequest(driverId);
+      if (activeRequest == null) {
+        available.add(doc);
+      }
+    }
+    return available;
+  }
+
+  // Get pending requests that have at least one rejected driver
+  Stream<QuerySnapshot> getRejectedRequests() {
+    // This is complex because we need to filter requests that have rejected_drivers subcollection.
+    // Simplest: get all pending requests and filter client-side (since pending count is usually small)
+    return _firestore
+        .collection('requests')
+        .where('status', isEqualTo: 'pending')
+        .orderBy('timestamp', descending: true)
+        .snapshots();
+  }
+
+  // Check if a request has any rejections
+  Future<bool> hasRejections(String requestId) async {
+    final rejections = await _firestore
+        .collection('requests')
+        .doc(requestId)
+        .collection('rejected_drivers')
+        .limit(1)
+        .get();
+    return rejections.docs.isNotEmpty;
+  }
+
+  // Get list of drivers who rejected a request
+  Future<List<String>> getRejectedDriverIds(String requestId) async {
+    final snapshot = await _firestore
+        .collection('requests')
+        .doc(requestId)
+        .collection('rejected_drivers')
+        .get();
+    return snapshot.docs.map((doc) => doc.id).toList();
+  }
+
+  // Reassign a request to a new driver (admin action)
+  Future<void> reassignRequest(
+    String requestId,
+    String newDriverId,
+    String newDriverName,
+  ) async {
+    await _firestore.collection('requests').doc(requestId).update({
+      'driverId': newDriverId,
+      'driverName': newDriverName,
+      'status': 'pending', // reset to pending so driver can accept
+      'acceptedAt': null, // clear acceptance timestamp
+      'assignedByAdmin': true,
+      'assignedAt': FieldValue.serverTimestamp(),
+    });
+    // Optionally, clear the rejected_drivers subcollection for this request
+    final rejectionsRef = _firestore
+        .collection('requests')
+        .doc(requestId)
+        .collection('rejected_drivers');
+    final snap = await rejectionsRef.get();
+    for (var doc in snap.docs) {
+      await doc.reference.delete();
+    }
+  }
+
+  // Get all drivers (for admin list) with online/offline status
+  Stream<QuerySnapshot> getAllDriversWithStatus() {
+    return _firestore
+        .collection('users')
+        .where('role', isEqualTo: 'driver')
+        .snapshots();
   }
 }

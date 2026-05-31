@@ -110,7 +110,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             label: 'Dashboard',
           ),
           BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Users'),
-          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Live Map'),
+          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Manage'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'Reports'),
         ],
       ),
