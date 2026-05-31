@@ -48,6 +48,56 @@ class _PatientHomeState extends State<PatientHome> {
     requestProvider.addListener(_onRequestChanged);
   }
 
+  Future<void> _cancelCurrentRequest() async {
+    final requestProvider = Provider.of<RequestProvider>(
+      context,
+      listen: false,
+    );
+    final active = requestProvider.activeRequest;
+    if (active == null) return;
+
+    final confirm =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Cancel Request'),
+            content: const Text(
+              'Are you sure you want to cancel this ambulance request?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('No'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Yes, Cancel'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirm) return;
+
+    final success = await requestProvider.cancelRequest(active.requestId);
+    if (success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Request cancelled successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(requestProvider.errorMessage ?? 'Failed to cancel'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   void _onRequestChanged() {
     final requestProvider = Provider.of<RequestProvider>(
       context,
@@ -351,6 +401,21 @@ class _PatientHomeState extends State<PatientHome> {
                         ),
                         child: const Text('Track Ambulance'),
                       ),
+
+                      if (_currentRequestStatus == 'pending' ||
+                          _currentRequestStatus == 'accepted' ||
+                          _currentRequestStatus == 'enroute')
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: OutlinedButton(
+                            onPressed: _cancelCurrentRequest,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Colors.white),
+                            ),
+                            child: const Text('Cancel Request'),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -689,20 +754,70 @@ class _PatientHomeState extends State<PatientHome> {
                           subtitle: Text(
                             'Requested: ${_formatDate(data['timestamp'])}',
                           ),
-                          trailing: data['status'] == 'completed' ||
-                              data['status'] == 'cancelled'
+                          trailing:
+                              (data['status'] == 'completed' ||
+                                  data['status'] == 'cancelled')
                               ? null
-                              : TextButton(
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => TrackingScreen(),
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.pop(context);
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                const TrackingScreen(),
+                                          ),
+                                        );
+                                      },
+                                      child: const Text('Track'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    TextButton(
+                                      onPressed: () async {
+                                        final requestProvider =
+                                            Provider.of<RequestProvider>(
+                                              context,
+                                              listen: false,
+                                            );
+                                        final success = await requestProvider
+                                            .cancelRequest(request.id);
+                                        if (success && mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Request cancelled',
+                                              ),
+                                              backgroundColor: Colors.green,
+                                            ),
+                                          );
+                                          Navigator.pop(
+                                            context,
+                                          ); // close bottom sheet
+                                        } else {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                requestProvider.errorMessage ??
+                                                    'Failed to cancel',
+                                              ),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                        }
+                                      },
+                                      child: const Text(
+                                        'Cancel',
+                                        style: TextStyle(color: Colors.red),
                                       ),
-                                    );
-                                  },
-                                  child: const Text('Track'),
+                                    ),
+                                  ],
                                 ),
                         ),
                       );

@@ -1,3 +1,4 @@
+import 'package:ambulance_finder_system/screens/patient/patient_home.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
@@ -169,14 +170,9 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
               text: 'Track Ambulance',
               onPressed: () {
                 Navigator.pop(context);
-                Navigator.pushReplacement(
+                Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => Scaffold(
-                      appBar: AppBar(title: Text('Tracking')),
-                      body: Center(child: Text('Tracking screen')),
-                    ),
-                  ),
+                  MaterialPageRoute(builder: (_) => const PatientHome()),
                 );
               },
             ),

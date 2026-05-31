@@ -355,8 +355,9 @@ class _LiveTrackingState extends State<LiveTracking> {
                             requestId,
                           ),
                           builder: (ctx, rejectedIds) {
-                            if (!rejectedIds.hasData)
+                            if (!rejectedIds.hasData) {
                               return const Text('Loading...');
+                            }
                             return Column(
                               children: rejectedIds.data!
                                   .map((id) => Text('• Driver ID: $id'))
@@ -491,7 +492,7 @@ class _AssignDriverDropdownState extends State<AssignDriverDropdown> {
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(border: OutlineInputBorder()),
               hint: const Text('Select driver'),
-              value: _selectedDriverId,
+              initialValue: _selectedDriverId,
               items: drivers.map((doc) {
                 final data = doc.data() as Map<String, dynamic>;
                 return DropdownMenuItem(
