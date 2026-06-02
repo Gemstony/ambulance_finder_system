@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:provider/provider.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/colors.dart';
-import '../../models/request_model.dart';
-import '../../models/user_model.dart';
 
 class LiveTracking extends StatefulWidget {
   const LiveTracking({super.key});

@@ -9,6 +9,7 @@ import '../../utils/colors.dart';
 import 'incoming_requests.dart';
 import '../../screens/common/profile_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'dart:async';
 
 class DriverHome extends StatefulWidget {
   const DriverHome({super.key});
@@ -22,6 +23,7 @@ class _DriverHomeState extends State<DriverHome> {
   final FirestoreService _firestoreService = FirestoreService();
   int _totalTrips = 0;
   bool _initialized = false;
+  StreamSubscription? _userStatusSubscription; // ✅ add this
 
   @override
   void initState() {
@@ -29,6 +31,47 @@ class _DriverHomeState extends State<DriverHome> {
     _loadDriverStats();
     _startLocationTracking();
     _initializeRequestListening();
+    _loadOnlineStatus(); // ✅ add this
+  }
+
+  // ✅ add this method
+  void _loadOnlineStatus() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final user = authProvider.currentUser;
+    if (user == null) return;
+
+    // Get initial status
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+    if (doc.exists && mounted) {
+      setState(() {
+        _isOnline = doc.data()?['isOnline'] ?? false;
+      });
+    }
+
+    // Listen for real-time changes (e.g., admin toggling)
+    _userStatusSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .snapshots()
+        .listen((snapshot) {
+          if (snapshot.exists && mounted) {
+            final newStatus = snapshot.data()?['isOnline'] ?? false;
+            if (_isOnline != newStatus) {
+              setState(() {
+                _isOnline = newStatus;
+              });
+            }
+          }
+        });
+  }
+
+  @override
+  void dispose() {
+    _userStatusSubscription?.cancel(); // ✅ cleanup
+    super.dispose();
   }
 
   void _initializeRequestListening() async {

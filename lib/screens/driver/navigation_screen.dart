@@ -1,3 +1,4 @@
+import 'package:ambulance_finder_system/screens/driver/driver_home.dart';
 import 'package:ambulance_finder_system/services/osrm_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -196,7 +197,23 @@ class _NavigationScreenState extends State<NavigationScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                // 1. Show the green success message
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Congratulations! Request completed.'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(
+                      seconds: 2,
+                    ), // Closes automatically after 2 seconds
+                  ),
+                );
+
+                // 2. Navigate to the home page
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (context) => const DriverHome()),
+                );
+              },
               child: const Text('OK'),
             ),
           ],
