@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/request_provider.dart';
 import '../../utils/colors.dart';
+import '../../services/osrm_service.dart';
 
 class TrackingScreen extends StatefulWidget {
   const TrackingScreen({super.key});
@@ -17,7 +18,8 @@ class TrackingScreen extends StatefulWidget {
 }
 
 class _TrackingScreenState extends State<TrackingScreen> {
-  MapController? _mapController;
+  late MapController
+  _mapController; // ✅ now non-nullable, initialized in initState
   LatLng? _patientLocation;
   LatLng? _driverLocation;
   String? _driverId, _requestId;
@@ -33,7 +35,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
   @override
   void initState() {
     super.initState();
-    _loadPatientLocation();
+    _mapController = MapController(); // ✅ initialize controller
     _getActiveRequest();
   }
 
@@ -62,65 +64,35 @@ class _TrackingScreenState extends State<TrackingScreen> {
     });
   }
 
-  Future<void> _loadPatientLocation() async {
-    final locationProvider = Provider.of<LocationProvider>(
-      context,
-      listen: false,
-    );
-    await locationProvider.getCurrentLocation();
-    final loc = locationProvider.currentLocation;
-    if (loc != null) {
-      setState(() {
-        _patientLocation = LatLng(loc.latitude, loc.longitude);
-        _updatePatientMarker();
-      });
-      if (_mapController != null) {
-        _mapController!.move(_patientLocation!, 14);
-      }
-    }
-  }
-
-  void _updatePatientMarker() {
-    if (_patientLocation == null) return;
-    setState(() {
-      _markers.removeWhere((m) => m.point == _patientLocation);
-      _markers.add(
-        Marker(
-          point: _patientLocation!,
-          width: 80,
-          height: 80,
-          child: const Icon(Icons.person, color: Colors.red, size: 40),
-        ),
-      );
-    });
-  }
-
-  void _updateDriverMarker() {
-    if (_driverLocation == null) return;
-    setState(() {
-      _markers.removeWhere((m) => m.point == _driverLocation);
-      _markers.add(
-        Marker(
-          point: _driverLocation!,
-          width: 80,
-          height: 80,
-          child: const Icon(Icons.local_hospital, color: Colors.blue, size: 40),
-        ),
-      );
-    });
-  }
-
-  void _drawRoute() {
+  void _drawRoute() async {
     if (_patientLocation == null || _driverLocation == null) return;
-    setState(() {
-      _polylines = [
-        Polyline(
-          points: [_driverLocation!, _patientLocation!],
-          strokeWidth: 4,
-          color: AppColors.primaryGreen,
-        ),
-      ];
-    });
+    try {
+      final route = await OSRMService.getRoute(
+        _driverLocation!,
+        _patientLocation!,
+      );
+      final routePoints = route['points'] as List<LatLng>;
+      setState(() {
+        _polylines = [
+          Polyline(
+            points: routePoints,
+            strokeWidth: 4,
+            color: AppColors.primaryGreen,
+          ),
+        ];
+      });
+    } catch (e) {
+      // fallback to straight line
+      setState(() {
+        _polylines = [
+          Polyline(
+            points: [_driverLocation!, _patientLocation!],
+            strokeWidth: 4,
+            color: AppColors.primaryGreen,
+          ),
+        ];
+      });
+    }
   }
 
   void _zoomToFitBoth() {
@@ -134,32 +106,25 @@ class _TrackingScreenState extends State<TrackingScreen> {
         .abs();
     final maxSpan = latSpan > lngSpan ? latSpan : lngSpan;
     double zoom = 14;
-    if (maxSpan > 0.2) {
+    if (maxSpan > 0.2)
       zoom = 10;
-    } else if (maxSpan > 0.1) {
+    else if (maxSpan > 0.1)
       zoom = 11.5;
-    } else if (maxSpan > 0.05) {
+    else if (maxSpan > 0.05)
       zoom = 13;
-    }
-    _mapController?.move(LatLng(midLat, midLng), zoom);
+    _mapController.move(LatLng(midLat, midLng), zoom);
   }
 
   Future<void> _getActiveRequest() async {
     final userId = FirebaseAuth.instance.currentUser?.uid;
     if (userId == null) return;
+
     _requestSubscription = FirebaseFirestore.instance
         .collection('requests')
         .where('patientId', isEqualTo: userId)
-        .where(
-          'status',
-          whereIn: [
-            'pending',
-            'accepted',
-            'enroute',
-            'arrived',
-            'patient_loaded',
-          ],
-        )
+        .where('status', whereIn: ['pending', 'accepted', 'enroute', 'arrived'])
+        .orderBy('timestamp', descending: true)
+        .limit(1)
         .snapshots()
         .listen((snapshot) {
           if (snapshot.docs.isNotEmpty) {
@@ -172,7 +137,6 @@ class _TrackingScreenState extends State<TrackingScreen> {
               _driverName = data['driverName'] ?? 'Assigning driver...';
               _driverPhone = data['driverPhone'] ?? '';
 
-              // Get patient location from request data
               final geo = data['patientLocation'];
               if (geo != null) {
                 if (geo is GeoPoint) {
@@ -186,8 +150,16 @@ class _TrackingScreenState extends State<TrackingScreen> {
             if (_driverId != null && _driverId!.isNotEmpty) {
               _listenToDriverLocation(_driverId!);
             }
+            if (_patientLocation != null) {
+              _mapController.move(_patientLocation!, 14);
+            }
           } else {
-            // No active request
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('No active ambulance request')),
+              );
+              Navigator.pop(context);
+            }
           }
         });
   }
@@ -204,13 +176,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
             if (location != null) {
               setState(() {
                 _driverLocation = LatLng(location.latitude, location.longitude);
-                _updateDriverMarker();
-                _updateMarkers();
-                _drawRoute();
               });
-              if (_mapController != null &&
-                  _patientLocation != null &&
-                  _driverLocation != null) {
+              _updateMarkers();
+              _drawRoute();
+              if (_patientLocation != null && _driverLocation != null) {
                 _zoomToFitBoth();
               }
             }
@@ -230,13 +199,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   String _formatDistance(double km) {
     if (km <= 0) return 'Calculating...';
-    // TODO: i will fix this distance problem letter, for now i will just show distance in meters
-    return '${km.toStringAsFixed(0)} m';
+    return '${km.toStringAsFixed(1)} km';
   }
 
   String _formatEta(double km) {
     if (km <= 0) return 'Calculating...';
-    // Assume average speed 40 km/h -> 0.666 km per minute
     final minutes = (km / 0.666).round();
     return '$minutes min';
   }
@@ -245,6 +212,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
   void dispose() {
     _driverLocationSubscription?.cancel();
     _requestSubscription?.cancel();
+    _mapController.dispose();
     super.dispose();
   }
 
@@ -295,6 +263,16 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 ),
                 MarkerLayer(markers: _markers),
                 PolylineLayer(polylines: _polylines),
+                const Align(
+                  alignment: Alignment.bottomLeft,
+                  child: Padding(
+                    padding: EdgeInsets.all(4.0),
+                    child: Text(
+                      '© OpenStreetMap contributors',
+                      style: TextStyle(fontSize: 10, color: Colors.grey),
+                    ),
+                  ),
+                ),
               ],
             )
           else
@@ -360,7 +338,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                                   ),
                                 ),
                               );
-                              Navigator.pop(context); // or navigate to home
+                              Navigator.pop(context);
                             }
                           },
                           icon: const Icon(Icons.check_circle),

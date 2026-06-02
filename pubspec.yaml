@@ -55,6 +55,9 @@ dev_dependencies:
   flutter_polyline_points:
   provider:
   url_launcher: ^6.3.0
+
+  # used by opening maps in browser
+  http: ^1.2.0
 # for messages
   flutter_local_notifications:
 

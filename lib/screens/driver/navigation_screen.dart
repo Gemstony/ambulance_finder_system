@@ -1,3 +1,4 @@
+import 'package:ambulance_finder_system/services/osrm_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -43,6 +44,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
   @override
   void initState() {
     super.initState();
+    _mapController = MapController();
     _startLocationUpdates();
     _updateRequestStatus('enroute');
     _setupMarkers();
@@ -78,24 +80,51 @@ class _NavigationScreenState extends State<NavigationScreen> {
     });
   }
 
-  void _drawRoute(LatLng currentPos) {
-    setState(() {
-      _polylines = [
-        Polyline(
-          points: [currentPos, LatLng(widget.patientLat, widget.patientLng)],
-          strokeWidth: 4,
-          color: AppColors.primaryGreen,
-        ),
-      ];
-    });
+  void _drawRoute(LatLng currentPos) async {
+    try {
+      final route = await OSRMService.getRoute(
+        currentPos,
+        LatLng(widget.patientLat, widget.patientLng),
+      );
+      final routePoints = route['points'] as List<LatLng>;
+      final distance = route['distance'] as double;
+      final duration = route['duration'] as double;
+
+      setState(() {
+        _currentDistanceMeters = distance;
+        _currentEta = Duration(seconds: duration.toInt());
+        _polylines = [
+          Polyline(
+            points: routePoints,
+            strokeWidth: 4,
+            color: AppColors.primaryGreen,
+          ),
+        ];
+      });
+    } catch (e) {
+      // Fallback to straight line if OSRM fails
+      print('Error drawing route: $e');
+      setState(() {
+        _polylines = [
+          Polyline(
+            points: [currentPos, LatLng(widget.patientLat, widget.patientLng)],
+            strokeWidth: 4,
+            color: AppColors.primaryGreen,
+          ),
+        ];
+      });
+    }
   }
 
   Future<void> _startLocationUpdates() async {
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    final locationProvider = Provider.of<LocationProvider>(
+      context,
+      listen: false,
+    );
     await locationProvider.startTracking(
       onLocationUpdate: (position) async {
         final currentPos = LatLng(position.latitude, position.longitude);
-        
+
         // Calculate distance in meters
         final distanceMeters = GpsService.calculateDistance(
           position.latitude,
@@ -103,21 +132,24 @@ class _NavigationScreenState extends State<NavigationScreen> {
           widget.patientLat,
           widget.patientLng,
         );
-        
+
         setState(() {
           _currentLocation = currentPos;
           _currentDistanceMeters = distanceMeters;
           _currentEta = GpsService.calculateEstimatedTime(distanceMeters);
         });
-        
+
         _updateMarkers(currentPos);
         _drawRoute(currentPos);
-        
+
         if (_mapController != null) {
           _zoomToFit(currentPos, LatLng(widget.patientLat, widget.patientLng));
         }
 
-        final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+        final user = Provider.of<AuthProvider>(
+          context,
+          listen: false,
+        ).currentUser;
         if (user != null) {
           await _firestoreService.updateDriverLocation(
             user.uid,
@@ -139,8 +171,10 @@ class _NavigationScreenState extends State<NavigationScreen> {
     double zoom = 14;
     if (maxSpan > 0.2) {
       zoom = 10;
-    } else if (maxSpan > 0.1) zoom = 11.5;
-    else if (maxSpan > 0.05) zoom = 13;
+    } else if (maxSpan > 0.1)
+      zoom = 11.5;
+    else if (maxSpan > 0.05)
+      zoom = 13;
     _mapController?.move(LatLng(midLat, midLng), zoom);
   }
 
@@ -157,7 +191,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Driver Arrived'),
-          content: const Text('The ambulance has been marked as arrived. The patient will now confirm.'),
+          content: const Text(
+            'The ambulance has been marked as arrived. The patient will now confirm.',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -175,7 +211,7 @@ class _NavigationScreenState extends State<NavigationScreen> {
     final distanceKm = _currentDistanceMeters / 1000;
     final etaMinutes = _currentEta.inMinutes;
 
-    return Scaffold( 
+    return Scaffold(
       appBar: AppBar(
         title: Text('Navigate to ${widget.patientName}'),
         backgroundColor: AppColors.primaryGreen,
@@ -196,6 +232,16 @@ class _NavigationScreenState extends State<NavigationScreen> {
                 ),
                 MarkerLayer(markers: _markers),
                 PolylineLayer(polylines: _polylines),
+                Align(
+                  alignment: Alignment.bottomLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: Text(
+                      '© OpenStreetMap contributors',
+                      style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                    ),
+                  ),
+                ),
               ],
             )
           else
@@ -205,7 +251,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
             left: 16,
             right: 16,
             child: Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
               elevation: 8,
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -215,26 +263,38 @@ class _NavigationScreenState extends State<NavigationScreen> {
                   children: [
                     Text(
                       'Patient: ${widget.patientName}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         // TODO: i will fix this distance problem letter, for now i will just show distance in meters
-                        Text('Distance: ${_currentDistanceMeters.toStringAsFixed(0)} m'),
-                        Text('ETA: ${etaMinutes > 0 ? "$etaMinutes min" : "Calculating"}'),
+                        Text(
+                          'Distance: ${_currentDistanceMeters.toStringAsFixed(0)} m',
+                        ),
+                        Text(
+                          'ETA: ${etaMinutes > 0 ? "$etaMinutes min" : "Calculating"}',
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text('Phone: ${widget.patientPhone}', style: const TextStyle(color: Colors.black54)),
+                    Text(
+                      'Phone: ${widget.patientPhone}',
+                      style: const TextStyle(color: Colors.black54),
+                    ),
                     const SizedBox(height: 16),
                     Row(
                       children: [
                         Expanded(
                           child: ElevatedButton(
                             onPressed: _isLoading ? null : _markAsArrived,
-                            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryGreen),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryGreen,
+                            ),
                             child: const Text('Arrived at Patient'),
                           ),
                         ),
