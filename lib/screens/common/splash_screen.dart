@@ -25,7 +25,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     
-    // Get current user data
+    // Get current all user data
     await authProvider.getCurrentUserData();
     
     final user = authProvider.currentUser;
