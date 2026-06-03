@@ -89,12 +89,12 @@ class _SplashScreenState extends State<SplashScreen> {
                 color: AppColors.primaryGreen,
               ),
             ),
-            const SizedBox(height: 32),
-            // App Name
+            const SizedBox(height: 30),
+            // App Name Ambulance finder
             Text(
               'Ambulance Finder',
               style: TextStyle(
-                fontSize: 28,
+                fontSize: 26,
                 fontWeight: FontWeight.bold,
                 color: AppColors.primaryGreen,
                 letterSpacing: 1.2,
@@ -110,12 +110,12 @@ class _SplashScreenState extends State<SplashScreen> {
                 letterSpacing: 0.5,
               ),
             ),
-            const SizedBox(height: 48),
+            const SizedBox(height: 46),
             // Loading Indicator
             const CircularProgressIndicator(
               valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryGreen),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 15),
             Text(
               'Loading...',
               style: TextStyle(
