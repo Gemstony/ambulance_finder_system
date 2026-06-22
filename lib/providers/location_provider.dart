@@ -82,12 +82,16 @@ class LocationProvider extends ChangeNotifier {
         return false;
       }
 
-      await getCurrentLocation();
+      await getCurrentLocation(); // fetches _currentLocation
+
+      // 🔥 Immediately call the callback with the initial position
+      if (onLocationUpdate != null && _currentLocation != null) {
+        onLocationUpdate(_currentLocation!);
+      }
 
       _locationStream = GpsService.getLocationStream();
       _locationSubscription = _locationStream?.listen((position) async {
         _currentLocation = position;
-        // Throttle address updates
         if (DateTime.now().difference(_lastAddressUpdate) >
             _addressUpdateInterval) {
           await _updateAddress();

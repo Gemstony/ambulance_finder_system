@@ -19,14 +19,14 @@ class GpsService {
     return true;
   }
   
-  // Get current location
+  // Get current location - using medium accuracy for faster response
   static Future<Position?> getCurrentLocation() async {
     bool hasPermission = await checkAndRequestPermission();
     if (!hasPermission) return null;
     
     try {
       return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        desiredAccuracy: LocationAccuracy.medium, // balanced speed vs accuracy
       );
     } catch (e) {
       print('Error getting location: $e');
@@ -38,7 +38,7 @@ class GpsService {
   static Stream<Position> getLocationStream() {
     return Geolocator.getPositionStream(
       locationSettings: LocationSettings(
-        accuracy: LocationAccuracy.high,
+        accuracy: LocationAccuracy.high, // high for driving navigation
         distanceFilter: 10, // Update every 10 meters
       ),
     );

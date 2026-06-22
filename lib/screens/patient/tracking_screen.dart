@@ -9,6 +9,7 @@ import '../../providers/location_provider.dart';
 import '../../providers/request_provider.dart';
 import '../../utils/colors.dart';
 import '../../services/osrm_service.dart';
+import '../../services/gps_service.dart';
 
 class TrackingScreen extends StatefulWidget {
   const TrackingScreen({super.key});
@@ -18,8 +19,7 @@ class TrackingScreen extends StatefulWidget {
 }
 
 class _TrackingScreenState extends State<TrackingScreen> {
-  late MapController
-  _mapController; // ✅ now non-nullable, initialized in initState
+  late MapController _mapController;
   LatLng? _patientLocation;
   LatLng? _driverLocation;
   String? _driverId, _requestId;
@@ -32,10 +32,15 @@ class _TrackingScreenState extends State<TrackingScreen> {
   StreamSubscription? _driverLocationSubscription;
   StreamSubscription? _requestSubscription;
 
+  // Driver location status and distance
+  bool _hasDriverLocation = false;
+  double _currentDistanceMeters = 0.0;
+  Duration _currentEta = Duration.zero;
+
   @override
   void initState() {
     super.initState();
-    _mapController = MapController(); // ✅ initialize controller
+    _mapController = MapController();
     _getActiveRequest();
   }
 
@@ -64,6 +69,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
     });
   }
 
+  // Draw route using OSRM, fallback to straight line
   void _drawRoute() async {
     if (_patientLocation == null || _driverLocation == null) return;
     try {
@@ -72,7 +78,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
         _patientLocation!,
       );
       final routePoints = route['points'] as List<LatLng>;
+      final distance = route['distance'] as double;
+      final duration = route['duration'] as double;
       setState(() {
+        _currentDistanceMeters = distance;
+        _currentEta = Duration(seconds: duration.toInt());
         _polylines = [
           Polyline(
             points: routePoints,
@@ -82,8 +92,16 @@ class _TrackingScreenState extends State<TrackingScreen> {
         ];
       });
     } catch (e) {
-      // fallback to straight line
+      // Fallback to straight line and use GPS distance
+      final distanceMeters = GpsService.calculateDistance(
+        _driverLocation!.latitude,
+        _driverLocation!.longitude,
+        _patientLocation!.latitude,
+        _patientLocation!.longitude,
+      );
       setState(() {
+        _currentDistanceMeters = distanceMeters;
+        _currentEta = GpsService.calculateEstimatedTime(distanceMeters);
         _polylines = [
           Polyline(
             points: [_driverLocation!, _patientLocation!],
@@ -106,9 +124,9 @@ class _TrackingScreenState extends State<TrackingScreen> {
         .abs();
     final maxSpan = latSpan > lngSpan ? latSpan : lngSpan;
     double zoom = 14;
-    if (maxSpan > 0.2) {
+    if (maxSpan > 0.2)
       zoom = 10;
-    } else if (maxSpan > 0.1)
+    else if (maxSpan > 0.1)
       zoom = 11.5;
     else if (maxSpan > 0.05)
       zoom = 13;
@@ -176,36 +194,16 @@ class _TrackingScreenState extends State<TrackingScreen> {
             if (location != null) {
               setState(() {
                 _driverLocation = LatLng(location.latitude, location.longitude);
+                _hasDriverLocation = true;
               });
               _updateMarkers();
-              _drawRoute();
+              _drawRoute(); // updates distance and ETA
               if (_patientLocation != null && _driverLocation != null) {
                 _zoomToFitBoth();
               }
             }
           }
         });
-  }
-
-  double _calculateDistance() {
-    if (_patientLocation == null || _driverLocation == null) return 0;
-    final distance = Distance();
-    return distance.as(
-      LengthUnit.Kilometer,
-      _driverLocation!,
-      _patientLocation!,
-    );
-  }
-
-  String _formatDistance(double km) {
-    if (km <= 0) return 'Calculating...';
-    return '${km.toStringAsFixed(1)} km';
-  }
-
-  String _formatEta(double km) {
-    if (km <= 0) return 'Calculating...';
-    final minutes = (km / 0.666).round();
-    return '$minutes min';
   }
 
   @override
@@ -218,9 +216,24 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final distance = _calculateDistance();
-    final eta = _formatEta(distance);
-    final distanceText = _formatDistance(distance);
+    // Format distance and ETA exactly like driver screen
+    String distanceText;
+    String etaText;
+
+    if (!_hasDriverLocation) {
+      distanceText = _requestStatus == 'pending' ? 'Waiting...' : 'N/A';
+      etaText = _requestStatus == 'pending' ? 'Waiting...' : 'N/A';
+    } else {
+      // Use same formatting as driver: meters if < 1000, else km
+      if (_currentDistanceMeters < 1000) {
+        distanceText = '${_currentDistanceMeters.toStringAsFixed(0)} m';
+      } else {
+        distanceText =
+            '${(_currentDistanceMeters / 1000).toStringAsFixed(1)} km';
+      }
+      final minutes = _currentEta.inMinutes;
+      etaText = minutes > 0 ? '$minutes min' : '0 min';
+    }
 
     if (_patientLocation == null && _requestStatus == 'pending') {
       return Scaffold(
@@ -242,6 +255,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         ),
       );
     }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Track Ambulance'),
@@ -249,6 +263,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
       ),
       body: Stack(
         children: [
+          // Map always shown – centered on patient location
           if (_patientLocation != null)
             FlutterMap(
               mapController: _mapController,
@@ -277,6 +292,8 @@ class _TrackingScreenState extends State<TrackingScreen> {
             )
           else
             const Center(child: CircularProgressIndicator()),
+
+          // Bottom card
           Positioned(
             bottom: 16,
             left: 16,
@@ -292,12 +309,20 @@ class _TrackingScreenState extends State<TrackingScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Driver: $_driverName',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                    Row(
+                      children: [
+                        const Icon(Icons.local_hospital, color: Colors.blue),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Driver: $_driverName',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -309,7 +334,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('Distance: $distanceText'),
-                        Text('ETA: $eta'),
+                        Text(':'),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -318,6 +343,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                         'Driver Phone: $_driverPhone',
                         style: const TextStyle(color: Colors.black54),
                       ),
+
                     if (_requestStatus == 'arrived')
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
@@ -354,6 +380,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
               ),
             ),
           ),
+          // Zoom to fit button
           Positioned(
             top: 16,
             right: 16,

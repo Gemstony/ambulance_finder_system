@@ -8,8 +8,6 @@ import '../../providers/request_provider.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_textfield.dart';
 import '../../utils/colors.dart';
-import 'package:geocoding/geocoding.dart';
-import 'package:geolocator/geolocator.dart';
 
 class RequestAmbulance extends StatefulWidget {
   const RequestAmbulance({super.key});
@@ -56,6 +54,7 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
   void initState() {
     super.initState();
     _loadActiveDrivers();
+    _ensureLocation();
   }
 
   void _loadActiveDrivers() {
@@ -72,21 +71,14 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
         });
   }
 
-  String currentAddress = '';
-
-  Future<void> getCurrentLocation() async {
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
+  Future<void> _ensureLocation() async {
+    final locationProvider = Provider.of<LocationProvider>(
+      context,
+      listen: false,
     );
-
-    List<Placemark> placemarks = await placemarkFromCoordinates(
-      position.latitude,
-      position.longitude,
-    );
-
-    Placemark place = placemarks.first;
-
-    currentAddress = '${place.street}, ${place.locality}, ${place.country}';
+    if (!locationProvider.hasLocation) {
+      await locationProvider.getCurrentLocation();
+    }
   }
 
   Future<void> _submitRequest() async {
@@ -113,7 +105,6 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
       return;
     }
 
-    // Check if there are active drivers
     if (_activeDrivers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -140,7 +131,6 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
     setState(() => _isLoading = false);
 
     if (requestId != null && mounted) {
-      // Show success dialog with driver info
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -194,6 +184,7 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
   @override
   Widget build(BuildContext context) {
     final locationProvider = Provider.of<LocationProvider>(context);
+    final bool locationReady = locationProvider.hasLocation;
 
     return Scaffold(
       appBar: AppBar(
@@ -312,24 +303,36 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
                         children: [
                           Icon(
                             Icons.location_on,
-                            color: AppColors.darkRed,
+                            color: locationReady
+                                ? AppColors.darkRed
+                                : Colors.grey,
                             size: 20,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              locationProvider.hasLocation
+                              locationReady
                                   ? locationProvider.currentAddress
                                   : 'Getting location...',
-                              style: const TextStyle(fontSize: 14),
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: locationReady
+                                    ? Colors.black
+                                    : AppColors.grey,
+                              ),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Ambulance will be sent to this address',
-                        style: TextStyle(fontSize: 12, color: AppColors.grey),
+                        locationReady
+                            ? 'Ambulance will be sent to this address'
+                            : 'Please wait, detecting your location...',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: locationReady ? AppColors.grey : Colors.orange,
+                        ),
                       ),
                     ],
                   ),
@@ -344,7 +347,6 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
-
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -358,13 +360,9 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
                 itemBuilder: (context, index) {
                   final type = _emergencyTypes[index];
                   final isSelected = _selectedEmergencyType == type['value'];
-
                   return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedEmergencyType = type['value'];
-                      });
-                    },
+                    onTap: () =>
+                        setState(() => _selectedEmergencyType = type['value']),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -395,9 +393,7 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
                                 : AppColors.grey,
                             size: 20,
                           ),
-
                           const SizedBox(width: 8),
-
                           Expanded(
                             child: Text(
                               type['label'],
@@ -514,7 +510,7 @@ class _RequestAmbulanceState extends State<RequestAmbulance> {
 
               const SizedBox(height: 24),
 
-              // Submit Button
+              // Submit Button – disabled if location not ready or already loading
               CustomButton(
                 text: '🚑 SEND EMERGENCY REQUEST',
                 onPressed: _submitRequest,
