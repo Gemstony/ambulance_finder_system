@@ -176,9 +176,9 @@ class _NavigationScreenState extends State<NavigationScreen> {
     final lngDiff = (driver.longitude - patient.longitude).abs();
     final maxSpan = latDiff > lngDiff ? latDiff : lngDiff;
     double zoom = 14;
-    if (maxSpan > 0.2)
+    if (maxSpan > 0.2) {
       zoom = 10;
-    else if (maxSpan > 0.1)
+    } else if (maxSpan > 0.1)
       zoom = 11.5;
     else if (maxSpan > 0.05)
       zoom = 13;

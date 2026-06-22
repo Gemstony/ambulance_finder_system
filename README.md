@@ -1,308 +1,347 @@
 🚑 Real-Time Ambulance Finder System
-https://img.shields.io/badge/Flutter-3.16+-02569B?style=flat&logo=flutter&logoColor=white
-https://img.shields.io/badge/Firebase-10.7+-FFCA28?style=flat&logo=firebase&logoColor=black
-https://img.shields.io/badge/OpenStreetMap-7EBE3D?style=flat&logo=openstreetmap&logoColor=white
-https://img.shields.io/badge/License-MIT-green.svg
 
-A cross‑platform mobile application that connects patients in need of emergency care with the nearest available ambulance in real time.
+
+
+
+
+
+
+
+A cross-platform mobile application that connects patients in need of emergency medical assistance with the nearest available ambulance in real-time.
+
+The system leverages Flutter, Firebase, OpenStreetMap, and OSRM Routing to provide fast emergency response, live ambulance tracking, and efficient dispatch management.
 
 📖 Table of Contents
 Overview
-
 Problem Statement
-
-Features
-
-Tech Stack
-
-Architecture
-
+Key Features
+Technology Stack
+System Architecture
 Screenshots
-
 Installation & Setup
-
 Firebase Configuration
-
 Usage Guide
-
 Project Structure
-
 Contributing
-
 License
-
 Acknowledgements
-
 🚨 Overview
-Real-Time Ambulance Finder System is a complete mobile solution designed to reduce emergency response times in Tanzania. It replaces manual phone‑based requests with a digital, location‑aware platform that instantly dispatches the nearest ambulance.
 
-The system consists of three user roles:
+The Real-Time Ambulance Finder System is designed to improve emergency healthcare response by replacing traditional phone-based ambulance requests with a digital, location-aware platform.
 
-Patients – request an ambulance, track arrival in real time, and confirm when the ambulance arrives.
+The application enables:
 
-Drivers – accept/reject requests, navigate to the patient using turn‑by‑turn road directions, and update trip status.
-
-Admins – manage drivers, monitor live locations, and reassign rejected requests.
-
+Instant ambulance requests.
+Automatic patient location detection.
+Real-time ambulance tracking.
+Smart driver assignment.
+Live driver monitoring.
+Efficient dispatch management.
+👥 User Roles
+Role	Responsibilities
+Patient	Request ambulances, track arrival, and confirm trip completion
+Driver	Accept requests, navigate to patients, and update trip status
+Admin	Manage drivers, monitor operations, and reassign requests
 ⚠️ Problem Statement
-In many regions, emergency medical services rely heavily on phone calls, leading to:
 
-Delayed response due to inaccurate location descriptions.
+In many regions, emergency medical services still rely heavily on phone calls and manual dispatching, leading to:
 
-Miscommunication between patients, dispatchers, and drivers.
+Delayed response times.
+Inaccurate location descriptions.
+Communication challenges.
+Lack of transparency for patients.
+Inefficient ambulance allocation.
 
-No transparency – patients cannot track ambulance arrival.
+This system addresses these challenges through:
 
-Manual dispatching that is error‑prone and slow.
+✅ Real-time location sharing
 
-This application addresses these pain points by automating location sharing, dispatching, and tracking, while providing a clear and intuitive interface for all users.
+✅ Automated ambulance dispatching
 
-✨ Features
-👤 Patient
-Request an ambulance with one tap (auto‑detects location).
+✅ Live ambulance tracking
 
-Choose emergency type (accident, heart attack, stroke, etc.) and severity.
+✅ Centralized emergency management
 
-Real‑time tracking of the dispatched ambulance on a map.
-
-View driver name, phone number, distance, and ETA.
-
-Cancel active request.
-
-View request history with status.
-
-🚗 Driver
-Toggle online/offline status.
-
-Receive live incoming requests (filtered to avoid repeated rejections).
-
+✨ Key Features
+👤 Patient Features
+One-tap ambulance request.
+Automatic GPS location detection.
+Emergency type selection.
+Severity level selection.
+Real-time ambulance tracking.
+Driver information display.
+Distance and ETA monitoring.
+Request cancellation.
+Request history management.
+🚗 Driver Features
+Online/Offline availability status.
+Receive nearby emergency requests.
 Accept or reject requests.
-
-Navigate to patient using road‑based directions (OSRM routing).
-
-Mark arrival; patient then confirms.
-
-Trip history – view completed trips with patient details.
-
-👨‍💼 Admin
-Full driver management – view online/offline status, activate/deactivate, toggle online.
-
-View all pending requests and manually assign a driver.
-
-See requests that drivers have rejected and reassign them.
-
-Monitor active drivers’ live locations.
-
-View all requests with current status.
-
+Turn-by-turn navigation.
+Patient location tracking.
+Arrival confirmation.
+Trip history management.
+👨‍💼 Admin Features
+Driver management.
+Driver activation/deactivation.
+Online status monitoring.
+Manual request assignment.
+Reassignment of rejected requests.
+Live driver location monitoring.
+Emergency request tracking.
+Operational dashboard.
 🗺️ Mapping & Navigation
-OpenStreetMap powered map tiles (free, no API key).
+OpenStreetMap
+Free map tiles.
+No API key required.
+Reliable global coverage.
+OSRM Routing
+Road-based navigation.
+Accurate distance calculation.
+ETA estimation.
+Route optimization.
+Fallback System
 
-OSRM (Open Source Routing Machine) for road‑based driving directions and accurate distance/ETA.
+If OSRM becomes unavailable, the system automatically uses straight-line distance calculations.
 
-Straight‑line fallback when OSRM is unavailable.
-
-⚙️ Backend & Real‑Time
-Firebase Firestore as primary database – real‑time updates.
-
-Firebase Authentication for secure login (email/password).
-
-Cloud Functions (optional) for push notifications – can be replaced with local notifications.
-
-🧰 Tech Stack
+⚡ Real-Time Backend Features
+Firebase Firestore
+Real-time database updates.
+Live request synchronization.
+Driver location updates.
+Firebase Authentication
+Secure Email/Password login.
+Role-based access control.
+Notifications
+Local notifications.
+Optional Firebase Cloud Messaging (FCM).
+🧰 Technology Stack
 Category	Technology
-Frontend	Flutter (Dart) – cross‑platform mobile app
-Backend	Firebase Firestore, Firebase Auth
-Mapping	OpenStreetMap (tiles) + OSRM (routing)
-Location	Geolocator plugin
+Frontend	Flutter (Dart)
+Backend	Firebase Firestore
+Authentication	Firebase Auth
+Mapping	OpenStreetMap
+Routing	OSRM
+Location Services	Geolocator
 State Management	Provider
-Notifications	flutter_local_notifications (FCM optional)
-HTTP Client	http package for OSRM API calls
+Notifications	flutter_local_notifications
+Networking	HTTP Package
 Version Control	Git & GitHub
-🧩 Architecture
-text
-┌─────────────────────────────────────────────────────────────┐
-│                         Mobile App                         │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐          │
-│  │  Patient   │  │  Driver    │  │  Admin     │          │
-│  │   Screen   │  │   Screen   │  │   Panel    │          │
-│  └────────────┘  └────────────┘  └────────────┘          │
-│       │                │                │                  │
-│       ▼                ▼                ▼                  │
-│  ┌─────────────────────────────────────────────────┐      │
-│  │             Flutter Providers                  │      │
-│  │  (Auth, Location, Request, etc.)              │      │
-│  └─────────────────────────────────────────────────┘      │
-│       │                │                │                  │
-└───────┼────────────────┼────────────────┼──────────────────┘
-        │                │                │
-        ▼                ▼                ▼
-┌─────────────────────────────────────────────────────────────┐
-│                         Firebase                            │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐│
-│  │  Firestore  │  │   Auth      │  │  (optional FCM)     ││
-│  │  (Requests, │  │  (Email/    │  │  for push notif.    ││
-│  │   Users,    │  │   Password) │  └─────────────────────┘│
-│  │   Locations)│  └─────────────┘                         │
-│  └─────────────┘                                          │
-└─────────────────────────────────────────────────────────────┘
-        │
-        ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    External Services                        │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  OpenStreetMap Tile Server (free tiles)            │   │
-│  │  OSRM Public API (http://router.project-osrm.org) │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+🧩 System Architecture
+┌──────────────────────────────────────────────┐
+│                 Mobile App                   │
+├──────────────────────────────────────────────┤
+│  Patient  │  Driver  │  Admin Dashboard      │
+└──────────────────────────────────────────────┘
+                     │
+                     ▼
+┌──────────────────────────────────────────────┐
+│             Flutter Providers                │
+│ Auth • Location • Requests • Tracking        │
+└──────────────────────────────────────────────┘
+                     │
+                     ▼
+┌──────────────────────────────────────────────┐
+│                 Firebase                     │
+├──────────────────────────────────────────────┤
+│ Firestore │ Authentication │ Notifications   │
+└──────────────────────────────────────────────┘
+                     │
+                     ▼
+┌──────────────────────────────────────────────┐
+│            External Services                 │
+├──────────────────────────────────────────────┤
+│ OpenStreetMap │ OSRM Routing Engine          │
+└──────────────────────────────────────────────┘
 📱 Screenshots
-Placeholder – add actual images from your app here.
+
+Replace the placeholders below with actual screenshots from your application.
 
 Patient Home	Request Ambulance	Tracking Map
-https://screenshots/patient_home.png	https://screenshots/request.png	https://screenshots/tracking.png
-Driver Home	Navigation Screen	Admin Panel
-https://screenshots/driver_home.png	https://screenshots/navigation.png	https://screenshots/admin.png
+
+	
+	
+Driver Home	Navigation Screen	Admin Dashboard
+
+	
+	
 🚀 Installation & Setup
 Prerequisites
-Flutter SDK (version 3.16 or later)
 
-Android Studio or VS Code with Flutter extensions
+Before getting started, ensure you have:
 
-An Android or iOS device/emulator
-
-A Firebase project (free tier works)
-
-Steps
-Clone the repository
-
-bash
+Flutter SDK (v3.16+)
+Android Studio or VS Code
+Android/iOS Emulator or Physical Device
+Firebase Project
+Clone Repository
 git clone https://github.com/your-username/ambulance-finder-system.git
-cd ambulance-finder-system
-Install dependencies
 
-bash
+cd ambulance-finder-system
+Install Dependencies
 flutter pub get
 Configure Firebase
+Step 1: Create Firebase Project
 
-Create a Firebase project and enable Authentication (Email/Password) and Firestore.
+Enable:
 
-Download the google-services.json (Android) and/or GoogleService-Info.plist (iOS) and place them in the correct folders.
+Authentication (Email/Password)
+Cloud Firestore
+Step 2: Download Firebase Configuration Files
+Android
+android/app/google-services.json
+iOS
+ios/Runner/GoogleService-Info.plist
+Step 3: Generate Firebase Options
+flutterfire configure
 
-Add your Firebase config to lib/firebase_options.dart (using the flutterfire CLI or manually).
+This generates:
 
-Enable required Firestore indexes
+lib/firebase_options.dart
+Configure Firestore Indexes
 
-The app uses queries with orderBy and where clauses (e.g., pending requests by timestamp).
+The application uses complex Firestore queries.
 
-Run the app; if you see an error about a missing index, click the link in the console to create it automatically in Firebase Console.
+If Firebase requests an index:
 
-Run the app
-
-bash
+Open the generated link.
+Create the index.
+Wait for indexing to complete.
+Run Application
 flutter run
-Note: No API keys are required for OpenStreetMap tiles or the OSRM routing service – they are free to use.
+
+No API keys are required for OpenStreetMap or OSRM.
 
 🔐 Firebase Configuration
 Firestore Security Rules
-To protect your data, set up the following rules (adjust as needed). See firestore.rules in the repository.
-
-javascript
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ... rules as provided in the project
+
+    // Add project security rules here
+
   }
 }
-Firestore Data Model (Simplified)
-users/{uid} – user profile (role, name, phone, isOnline, isActive, etc.)
+Firestore Data Model
+Users Collection
+users/{uid}
 
-requests/{requestId} – emergency requests with status, location, driver assignment, timestamps.
+Stores:
 
-drivers_location/{driverId} – real‑time driver location (lat/lng, lastUpdate).
+Role
+Name
+Phone
+Online Status
+Active Status
+Requests Collection
+requests/{requestId}
 
-requests/{requestId}/rejected_drivers/{driverId} – tracks which drivers rejected a request.
+Stores:
+
+Emergency Type
+Patient Location
+Driver Assignment
+Status
+Timestamps
+Driver Locations
+drivers_location/{driverId}
+
+Stores:
+
+Latitude
+Longitude
+Last Update Time
+Rejected Drivers
+requests/{requestId}/rejected_drivers/{driverId}
+
+Tracks drivers who rejected specific requests.
 
 🗺️ Usage Guide
-For Patients
-Open the app and log in (or sign up as a patient).
-
-On the home screen, tap “REQUEST AMBULANCE NOW”.
-
-Fill in emergency type, severity, and optional notes.
-
-Submit – your request is sent to all online drivers.
-
-Wait for a driver to accept; then track the ambulance on the map.
-
-When the ambulance arrives, tap “Confirm Ambulance Arrival” to complete the trip.
-
-For Drivers
-Log in as a driver.
-
-Toggle your Online status to start receiving requests.
-
-Incoming requests appear on the home screen and in the notification badge.
-
-Accept a request – you’re redirected to the navigation screen.
-
-The map shows the patient’s location; follow the route.
-
-When you arrive, tap “Arrived at Patient”. The patient will confirm.
-
-After confirmation, the trip is marked as completed.
-
-For Admins
-Log in as an admin.
-
-The admin panel shows tabs:
-
-Drivers – view all drivers, toggle online/offline, activate/deactivate.
-
-Pending – see all pending requests and assign a driver manually.
-
-Rejected – requests rejected by drivers; reassign them.
-
-All Requests – complete history.
-
-Admin can also see live driver locations on a map.
-
+Patient Workflow
+Register/Login.
+Tap Request Ambulance Now.
+Select emergency type and severity.
+Submit request.
+Track ambulance in real-time.
+Confirm arrival after pickup.
+Driver Workflow
+Login.
+Go Online.
+Receive incoming requests.
+Accept request.
+Navigate to patient.
+Mark arrival.
+Complete trip.
+Admin Workflow
+Drivers Tab
+View all drivers.
+Activate/Deactivate drivers.
+Toggle online status.
+Pending Requests Tab
+View pending requests.
+Assign drivers manually.
+Rejected Requests Tab
+Reassign rejected requests.
+Requests History Tab
+View all emergency requests.
 📁 Project Structure
-text
 lib/
-├── models/                 # Data models (User, Request, Ambulance, etc.)
-├── providers/              # State management (Auth, Location, Request)
+│
+├── models/
+│   ├── user_model.dart
+│   ├── request_model.dart
+│
+├── providers/
+│   ├── auth_provider.dart
+│   ├── request_provider.dart
+│
 ├── screens/
-│   ├── auth/               # Login / Register screens
-│   ├── patient/            # Patient Home, Request, Tracking
-│   ├── driver/             # Driver Home, Incoming Requests, Navigation
-│   └── admin/              # Admin dashboard (LiveTracking)
-├── services/               # Backend services (Firestore, GPS, OSRM, Map)
-├── utils/                  # Constants, colors, helpers
-├── widgets/                # Reusable UI components (buttons, text fields)
-└── main.dart               # App entry point
+│   ├── auth/
+│   ├── patient/
+│   ├── driver/
+│   └── admin/
+│
+├── services/
+│   ├── firestore_service.dart
+│   ├── location_service.dart
+│   ├── osrm_service.dart
+│
+├── utils/
+│
+├── widgets/
+│
+└── main.dart
 🤝 Contributing
-Contributions are welcome! To contribute:
 
-Fork the repository.
+Contributions are welcome.
 
-Create a feature branch: git checkout -b feature/your-feature.
+Steps
+# Fork Repository
 
-Commit your changes: git commit -m 'Add some feature'.
+# Create Feature Branch
+git checkout -b feature/your-feature
 
-Push to the branch: git push origin feature/your-feature.
+# Commit Changes
+git commit -m "Add new feature"
 
-Open a Pull Request.
+# Push Changes
+git push origin feature/your-feature
 
-Please ensure your code follows the existing style and includes appropriate comments.
+Then open a Pull Request.
 
 📄 License
-This project is licensed under the MIT License – see the LICENSE file for details.
+
+This project is licensed under the MIT License.
+
+See the LICENSE file for additional details.
 
 🙏 Acknowledgements
-OpenStreetMap for providing free map tiles.
 
-OSRM for the open‑source routing engine.
+Special thanks to:
 
-Flutter and Firebase teams for their excellent tools.
-
-All contributors and testers who helped shape this project.
+OpenStreetMap Community
+OSRM Project
+Flutter Team
+Firebase Team
+Contributors and Testers

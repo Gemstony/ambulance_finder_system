@@ -124,9 +124,9 @@ class _TrackingScreenState extends State<TrackingScreen> {
         .abs();
     final maxSpan = latSpan > lngSpan ? latSpan : lngSpan;
     double zoom = 14;
-    if (maxSpan > 0.2)
+    if (maxSpan > 0.2) {
       zoom = 10;
-    else if (maxSpan > 0.1)
+    } else if (maxSpan > 0.1)
       zoom = 11.5;
     else if (maxSpan > 0.05)
       zoom = 13;
